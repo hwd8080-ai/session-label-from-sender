@@ -1,31 +1,31 @@
 {
-  "name": "@openclaw/session-label-from-sender",
+  "name": "@hwd8080-ai/session-label-from-sender",
   "version": "2026.7.2",
-  "description": "Auto-label sessions with sender name for all channels, plus a session admin WebUI with username search and date-range filtering.",
+  "description": "OpenClaw 会话管理插件 - 自动标注发送者、SQLite 增量同步、对话详情搜索/导出、支持标准 JSONL 和 trajectory 轨迹格式",
   "repository": {
     "type": "git",
-    "url": "https://github.com/openclaw/openclaw"
+    "url": "https://github.com/hwd8080-ai/session-label-from-sender"
   },
   "type": "module",
-  "devDependencies": {
-    "@openclaw/plugin-sdk": "workspace:*"
-  },
   "openclaw": {
     "extensions": [
       "./dist/index.mjs"
     ],
-    "install": {
-      "npmSpec": "@openclaw/session-label-from-sender",
-      "localPath": "extensions/session-label-from-sender",
-      "defaultChoice": "npm",
-      "minHostVersion": ">=2026.7.1"
+    "build": {
+      "openclawVersion": ">=2026.7.1"
     },
     "compat": {
       "pluginApi": ">=2026.7.1"
     },
+    "install": {
+      "npmSpec": "@hwd8080-ai/session-label-from-sender",
+      "localPath": "extensions/session-label-from-sender",
+      "defaultChoice": "npm",
+      "minHostVersion": ">=2026.7.1"
+    },
     "release": {
       "publishToClawHub": true,
-      "publishToNpm": true
+      "publishToNpm": false
     }
   }
 }
