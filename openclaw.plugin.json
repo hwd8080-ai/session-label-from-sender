@@ -1,0 +1,17 @@
+{
+  "id": "session-label-from-sender",
+  "enabledByDefault": true,
+  "activation": {
+    "onStartup": true
+  },
+  "name": "Session Label from Sender",
+  "description": "Auto-labels sessions with sender name for private chats across all channels (Feishu, WeChat, Discord, Slack, Telegram, etc.), and provides a session admin WebUI with username/date-range search and conversation content viewing (model input/output, tool calls).",
+  "contracts": {
+    "gatewayMethodDispatch": ["authenticated-request"]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

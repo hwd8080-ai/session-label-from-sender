@@ -1,0 +1,31 @@
+{
+  "name": "@openclaw/session-label-from-sender",
+  "version": "2026.7.2",
+  "description": "Auto-label sessions with sender name for all channels, plus a session admin WebUI with username search and date-range filtering.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openclaw/openclaw"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@openclaw/plugin-sdk": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.mjs"
+    ],
+    "install": {
+      "npmSpec": "@openclaw/session-label-from-sender",
+      "localPath": "extensions/session-label-from-sender",
+      "defaultChoice": "npm",
+      "minHostVersion": ">=2026.7.1"
+    },
+    "compat": {
+      "pluginApi": ">=2026.7.1"
+    },
+    "release": {
+      "publishToClawHub": true,
+      "publishToNpm": true
+    }
+  }
+}
