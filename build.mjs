@@ -25,7 +25,7 @@ try {
   ({ build } = await import("esbuild"));
 } catch {
   const ws = path.resolve(
-    process.env.HOME || "/Users/hwd7500",
+    process.env.HOME,
     ".workbuddy/binaries/node/workspace/node_modules/esbuild",
   );
   ({ build } = await import(ws + "/lib/main.js"));
