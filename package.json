@@ -12,13 +12,14 @@
       "./dist/index.mjs"
     ],
     "build": {
-      "openclawVersion": ">=2026.7.1"
+      "openclawVersion": "2026.7.1"
     },
     "compat": {
       "pluginApi": ">=2026.7.1"
     },
     "install": {
       "npmSpec": "@hwd8080-ai/session-label-from-sender",
+      "clawhubSpec": "@hwd8080-ai/session-label-from-sender",
       "localPath": "extensions/session-label-from-sender",
       "defaultChoice": "npm",
       "minHostVersion": ">=2026.7.1"
