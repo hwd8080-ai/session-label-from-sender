@@ -305,7 +305,7 @@ function buildJs() {
   js.push("    });");
   js.push("    var text = lines.join('\\n\\n');");
   js.push("    var nm = currentSession ? (currentSession.agent_id || 'export') : 'export';");
-  js.push("    var filename = '对话记录_' + nm + '_' + Date.now() + '.txt';");
+  js.push("    var filename = '会话记录_' + nm + '_' + Date.now() + '.txt';");
   js.push("    var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });");
   js.push("    var url = URL.createObjectURL(blob);");
   js.push("    var a = document.createElement('a');");
@@ -443,7 +443,7 @@ function buildHtml() {
   lines.push("<head>");
   lines.push("<meta charset=\"UTF-8\">");
   lines.push("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
-  lines.push("<title>对话记录管理</title>");
+  lines.push("<title>会话记录管理</title>");
   lines.push("<style>");
   lines.push(CSS);
   lines.push("</style>");
@@ -451,7 +451,7 @@ function buildHtml() {
   lines.push("<body>");
   lines.push("<main class=\"app\">");
   lines.push("  <header class=\"top\">");
-  lines.push("    <div class=\"head-row\"><div class=\"head-left\"><h1>对话记录</h1><p>查找并回溯 Agent 与用户的历史对话</p></div><div class=\"head-right\"><span class=\"sync-dot\" id=\"syncDot\"></span><button class=\"btn sync-btn\" id=\"syncBtn\" type=\"button\">⟳ 同步</button><span id=\"syncStatus\">就绪</span><span class=\"sync-time\" id=\"syncTime\"></span></div></div>");
+  lines.push("    <div class=\"head-row\"><div class=\"head-left\"><h1>会话记录</h1><p>查找并回溯 Agent 与用户的历史对话</p></div><div class=\"head-right\"><span class=\"sync-dot\" id=\"syncDot\"></span><button class=\"btn sync-btn\" id=\"syncBtn\" type=\"button\">⟳ 同步</button><span id=\"syncStatus\">就绪</span><span class=\"sync-time\" id=\"syncTime\"></span></div></div>");
   lines.push("  </header>");
   lines.push("  <section class=\"card filters\">");
   lines.push("    <div id=\"filters\">");
@@ -481,7 +481,7 @@ function buildHtml() {
   lines.push("  </section>");
   lines.push("  <section class=\"card\">");
   lines.push("    <div class=\"heading\">");
-  lines.push("      <div><h2>查询列表</h2><p>共 <strong id=\"count\">0</strong> 条对话记录</p></div>");
+  lines.push("      <div><h2>查询列表</h2><p>共 <strong id=\"count\">0</strong> 条会话记录</p></div>");
   lines.push("    </div>");
   lines.push("    <div class=\"tablebox\">");
   lines.push("      <table>");

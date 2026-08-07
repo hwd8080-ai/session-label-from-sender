@@ -209,10 +209,29 @@ function createAdminApiHandler(api: unknown) {
     if (pathname === "/plugins/session-admin/api/agents" && req.method === "GET") {
       try {
         const db = getDb();
-        const agents = listAgentIds(db);
+        const dbAgents = listAgentIds(db);
+
+        // Also read from openclaw.json to get all configured agents
+        const stateDir = resolveStateDir();
+        const configPath = path.join(stateDir, "openclaw.json");
+        const configAgents: string[] = [];
+        try {
+          const raw = fs.readFileSync(configPath, "utf-8");
+          const config = JSON.parse(raw);
+          if (config.agents?.list && Array.isArray(config.agents.list)) {
+            for (const a of config.agents.list) {
+              if (a?.id) configAgents.push(a.id);
+            }
+          }
+        } catch { /* config read fail, use db only */ }
+
+        // Merge and deduplicate, config agents first for consistent ordering
+        const merged = [...new Set([...configAgents, ...dbAgents])];
+        if (merged.length === 0) merged.push("main");
+
         res.statusCode = 200;
         res.setHeader("content-type", "application/json; charset=utf-8");
-        res.end(JSON.stringify({ agents }));
+        res.end(JSON.stringify({ agents: merged }));
       } catch {
         res.statusCode = 200;
         res.setHeader("content-type", "application/json; charset=utf-8");

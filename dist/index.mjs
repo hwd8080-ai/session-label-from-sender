@@ -1,7 +1,7 @@
 // index.ts
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import path3 from "node:path";
-import "node:fs";
+import fs3 from "node:fs";
 
 // db.ts
 import { DatabaseSync } from "node:sqlite";
@@ -894,7 +894,7 @@ function buildJs() {
   js.push("    });");
   js.push("    var text = lines.join('\\n\\n');");
   js.push("    var nm = currentSession ? (currentSession.agent_id || 'export') : 'export';");
-  js.push("    var filename = '\u5BF9\u8BDD\u8BB0\u5F55_' + nm + '_' + Date.now() + '.txt';");
+  js.push("    var filename = '\u4F1A\u8BDD\u8BB0\u5F55_' + nm + '_' + Date.now() + '.txt';");
   js.push("    var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });");
   js.push("    var url = URL.createObjectURL(blob);");
   js.push("    var a = document.createElement('a');");
@@ -1030,7 +1030,7 @@ function buildHtml() {
   lines.push("<head>");
   lines.push('<meta charset="UTF-8">');
   lines.push('<meta name="viewport" content="width=device-width,initial-scale=1">');
-  lines.push("<title>\u5BF9\u8BDD\u8BB0\u5F55\u7BA1\u7406</title>");
+  lines.push("<title>\u4F1A\u8BDD\u8BB0\u5F55\u7BA1\u7406</title>");
   lines.push("<style>");
   lines.push(CSS);
   lines.push("</style>");
@@ -1038,7 +1038,7 @@ function buildHtml() {
   lines.push("<body>");
   lines.push('<main class="app">');
   lines.push('  <header class="top">');
-  lines.push('    <div class="head-row"><div class="head-left"><h1>\u5BF9\u8BDD\u8BB0\u5F55</h1><p>\u67E5\u627E\u5E76\u56DE\u6EAF Agent \u4E0E\u7528\u6237\u7684\u5386\u53F2\u5BF9\u8BDD</p></div><div class="head-right"><span class="sync-dot" id="syncDot"></span><button class="btn sync-btn" id="syncBtn" type="button">\u27F3 \u540C\u6B65</button><span id="syncStatus">\u5C31\u7EEA</span><span class="sync-time" id="syncTime"></span></div></div>');
+  lines.push('    <div class="head-row"><div class="head-left"><h1>\u4F1A\u8BDD\u8BB0\u5F55</h1><p>\u67E5\u627E\u5E76\u56DE\u6EAF Agent \u4E0E\u7528\u6237\u7684\u5386\u53F2\u5BF9\u8BDD</p></div><div class="head-right"><span class="sync-dot" id="syncDot"></span><button class="btn sync-btn" id="syncBtn" type="button">\u27F3 \u540C\u6B65</button><span id="syncStatus">\u5C31\u7EEA</span><span class="sync-time" id="syncTime"></span></div></div>');
   lines.push("  </header>");
   lines.push('  <section class="card filters">');
   lines.push('    <div id="filters">');
@@ -1068,7 +1068,7 @@ function buildHtml() {
   lines.push("  </section>");
   lines.push('  <section class="card">');
   lines.push('    <div class="heading">');
-  lines.push('      <div><h2>\u67E5\u8BE2\u5217\u8868</h2><p>\u5171 <strong id="count">0</strong> \u6761\u5BF9\u8BDD\u8BB0\u5F55</p></div>');
+  lines.push('      <div><h2>\u67E5\u8BE2\u5217\u8868</h2><p>\u5171 <strong id="count">0</strong> \u6761\u4F1A\u8BDD\u8BB0\u5F55</p></div>');
   lines.push("    </div>");
   lines.push('    <div class="tablebox">');
   lines.push("      <table>");
@@ -1241,10 +1241,25 @@ function createAdminApiHandler(api) {
     if (pathname === "/plugins/session-admin/api/agents" && req.method === "GET") {
       try {
         const db = getDb();
-        const agents = listAgentIds(db);
+        const dbAgents = listAgentIds(db);
+        const stateDir = resolveStateDir();
+        const configPath = path3.join(stateDir, "openclaw.json");
+        const configAgents = [];
+        try {
+          const raw = fs3.readFileSync(configPath, "utf-8");
+          const config = JSON.parse(raw);
+          if (config.agents?.list && Array.isArray(config.agents.list)) {
+            for (const a of config.agents.list) {
+              if (a?.id) configAgents.push(a.id);
+            }
+          }
+        } catch {
+        }
+        const merged = [.../* @__PURE__ */ new Set([...configAgents, ...dbAgents])];
+        if (merged.length === 0) merged.push("main");
         res.statusCode = 200;
         res.setHeader("content-type", "application/json; charset=utf-8");
-        res.end(JSON.stringify({ agents }));
+        res.end(JSON.stringify({ agents: merged }));
       } catch {
         res.statusCode = 200;
         res.setHeader("content-type", "application/json; charset=utf-8");
