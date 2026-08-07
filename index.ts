@@ -1,6 +1,7 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import path from "node:path";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   openSessionAdminDb,
   listSessions,
@@ -11,24 +12,46 @@ import {
   listAgentIds,
   listChannels,
   type SessionRow,
+  type DatabaseSync,
 } from "./db.js";
 import {
   syncAllSessions,
   syncSessionTranscript,
   resolveStateDir,
   extractAgentIdFromSessionKey,
+  listAgentDirs,
+  reconcileIsGroup,
+  channelFromSessionKey,
+  computeSenderName,
+  computeDisplayName,
 } from "./sync.js";
-import { ADMIN_PAGE_HTML } from "./ui.js";
+import { renderListPage, renderDetailPage, buildExportText } from "./ui.js";
 
 // ── Database singleton ──────────────────────────────────────────────────
 
 let dbInstance: ReturnType<typeof openSessionAdminDb> | null = null;
 let syncTimer: ReturnType<typeof setInterval> | null = null;
 
-function getDb(stateDir?: string) {
+// Resolve the extension's own directory by walking up from the loaded
+// bundle until we find openclaw.plugin.json. This keeps the plugin's data
+// self-contained next to the code (extensions/session-label-from-sender/data)
+// instead of polluting openclaw's stateDir root with the db/-shm/-wal files.
+function resolveExtensionDir(): string {
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, "openclaw.plugin.json"))) return dir;
+    dir = path.dirname(dir);
+  }
+  return path.dirname(fileURLToPath(import.meta.url));
+}
+
+function resolveDbPath(): string {
+  return path.join(resolveExtensionDir(), "data", "session-admin.db");
+}
+
+function getDb(_stateDir?: string) {
   if (!dbInstance) {
-    const actualStateDir = stateDir || resolveStateDir();
-    const dbPath = path.join(actualStateDir, "session-admin.db");
+    const dbPath = resolveDbPath();
     dbInstance = openSessionAdminDb(dbPath);
   }
   return dbInstance;
@@ -79,7 +102,7 @@ function registerInboundClaimHook(api: unknown) {
             session_id: sessionId,
             agent_id: extractAgentIdFromSessionKey(c.sessionKey),
             label: ev.senderName,
-            sender_name: ev.senderName,
+            sender_name: computeSenderName(c.sessionKey, ev.senderName),
             is_group: isGroup ? 1 : 0,
             updated_at: Date.now(),
           });
@@ -125,40 +148,47 @@ function syncSessionRegistry(api: unknown) {
           }>;
         };
       };
-      config?: {
-        current?: () => { agents?: { list?: Array<{ id?: string }> } };
-      };
     };
   };
   const db = getDb();
-  try {
-    const entries = a.runtime.agent.session.listSessionEntries();
-    for (const { sessionKey, entry } of entries) {
-      if (!entry.sessionId) continue;
-      const now = Date.now();
-      const lastActivity = entry.lastActivityAt ?? 0;
-      let status: "idle" | "active" | "finished" | "stopped" = "idle";
-      if (lastActivity && now - lastActivity < 5 * 60 * 1000) {
-        status = "active";
-      } else if (entry.category === "finished") {
-        status = "finished";
-      } else if (entry.category === "stopped") {
-        status = "stopped";
+  // Enumerate every agent that has transcript data on disk, then sync each
+  // one's session registry. (listSessionEntries() with no agentId only returns
+  // the "main" agent, which is why sub-agent sessions were previously skipped.)
+  const stateDir = resolveStateDir();
+  const agentIds = listAgentDirs(stateDir);
+  for (const agentId of agentIds) {
+    try {
+      const entries = a.runtime.agent.session.listSessionEntries({ agentId });
+      for (const { sessionKey, entry } of entries) {
+        if (!entry.sessionId) continue;
+        const now = Date.now();
+        const lastActivity = entry.lastActivityAt ?? 0;
+        let status: "idle" | "active" | "finished" | "stopped" = "idle";
+        if (lastActivity && now - lastActivity < 5 * 60 * 1000) {
+          status = "active";
+        } else if (entry.category === "finished") {
+          status = "finished";
+        } else if (entry.category === "stopped") {
+          status = "stopped";
+        }
+        // 姓名列：WebUI -> "admin"；IM 渠道有名字用名字，否则用发送人 ID
+        const senderName = computeSenderName(sessionKey, entry.origin?.label);
+        upsertSession(db, {
+          session_key: sessionKey,
+          session_id: entry.sessionId,
+          agent_id: extractAgentIdFromSessionKey(sessionKey),
+          label: entry.label ?? undefined,
+          display_name: computeDisplayName(sessionKey, entry.displayName, senderName),
+          channel: channelFromSessionKey(sessionKey),
+          sender_name: senderName,
+          is_group: reconcileIsGroup(sessionKey),
+          status,
+          updated_at: entry.updatedAt ?? now,
+        });
       }
-      upsertSession(db, {
-        session_key: sessionKey,
-        session_id: entry.sessionId,
-        agent_id: extractAgentIdFromSessionKey(sessionKey),
-        label: entry.label ?? undefined,
-        display_name: entry.displayName ?? undefined,
-        channel: entry.origin?.provider ?? undefined,
-        sender_name: entry.origin?.label ?? undefined,
-        status,
-        updated_at: entry.updatedAt ?? now,
-      });
+    } catch {
+      // ignore this agent's errors and continue with the next
     }
-  } catch {
-    // ignore
   }
 }
 
@@ -176,10 +206,92 @@ function createAdminPageHandler(api: unknown) {
     if (pathname !== "/plugins/session-admin" && pathname !== "/plugins/session-admin/") {
       return false;
     }
+    const params = url.searchParams;
+    const db = getDb();
+
+    // Manual sync (then redirect to a clean URL so a refresh stays stable)
+    if (params.get("sync") === "1") {
+      try {
+        syncSessionRegistry(api);
+        await syncAllSessions(db);
+      } catch {
+        // ignore sync errors
+      }
+      const clean = new URL(req.url ?? "/", "http://127.0.0.1");
+      clean.searchParams.delete("sync");
+      res.statusCode = 302;
+      res.setHeader("location", clean.pathname + clean.search);
+      res.end();
+      return true;
+    }
+
+    // Conversation detail (server-rendered; works without client JavaScript)
+    const sessionKey = params.get("session");
+    if (sessionKey) {
+      const session = getSession(db, sessionKey);
+      if (session) {
+        try {
+          await syncSessionTranscript(db, sessionKey, session.session_id);
+          const g = reconcileIsGroup(sessionKey);
+          upsertSession(db, { session_key: sessionKey, session_id: session.session_id, is_group: g });
+        } catch {
+          // ignore sync errors, serve what we have
+        }
+      }
+      const detail = getSession(db, sessionKey);
+      if (!detail) {
+        res.statusCode = 404;
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.end("<!DOCTYPE html><meta charset=\"utf-8\"><title>未找到</title><body style=\"font-family:sans-serif;padding:40px\">未找到该会话，可能尚未同步。<br><a href=\"?\">返回列表</a></body>");
+        return true;
+      }
+      const msearch = params.get("msearch")?.trim() || undefined;
+      const result = getMessages(db, sessionKey, 300, undefined, msearch);
+      if (params.get("dl") === "1") {
+        const text = buildExportText(detail, result.messages);
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/plain; charset=utf-8");
+        res.setHeader("content-disposition", "attachment; filename=\"conversation_" + encodeURIComponent(sessionKey) + ".txt\"");
+        res.end(text);
+        return true;
+      }
+      const html = renderDetailPage({ session: detail, messages: result.messages, msearch });
+      res.statusCode = 200;
+      res.setHeader("content-type", "text/html; charset=utf-8");
+      res.setHeader("cache-control", "no-store, max-age=0");
+      res.end(html);
+      return true;
+    }
+
+    // Session list (server-rendered; client JS enhances when scripts are allowed)
+    try { syncSessionRegistry(api); } catch {
+      // ignore
+    }
+    const search = params.get("search")?.trim() || undefined;
+    const agentId = params.get("agent")?.trim() || undefined;
+    const channel = params.get("channel")?.trim() || undefined;
+    const dateFrom = params.get("dateFrom")?.trim() || undefined;
+    const dateTo = params.get("dateTo")?.trim() || undefined;
+    const page = Math.max(1, parseInt(params.get("page") || "1", 10) || 1);
+    const pageSize = 10;
+    const offset = (page - 1) * pageSize;
+    const list = listSessions(db, {
+      search, agentId, channel, dateFrom, dateTo,
+      sortBy: "updated_at", sortDir: "desc", offset, limit: pageSize,
+    });
+    const agents = listAgentIds(db);
+    const channels = listChannels(db);
+    const html = renderListPage({
+      sessions: list.sessions,
+      total: list.total,
+      page, pageSize,
+      agents, channels,
+      filters: { search, agentId, channel, dateFrom, dateTo },
+    });
     res.statusCode = 200;
     res.setHeader("content-type", "text/html; charset=utf-8");
     res.setHeader("cache-control", "no-store, max-age=0");
-    res.end(ADMIN_PAGE_HTML);
+    res.end(html);
     return true;
   };
 }
@@ -205,33 +317,16 @@ function createAdminApiHandler(api: unknown) {
       return true;
     }
 
-    // Agents list
+    // Agents list — derived from the sessions table (GROUP BY agent_id).
+    // Using the DB as the source of truth keeps historical rows aligned even
+    // if openclaw.json config changes later.
     if (pathname === "/plugins/session-admin/api/agents" && req.method === "GET") {
       try {
         const db = getDb();
-        const dbAgents = listAgentIds(db);
-
-        // Also read from openclaw.json to get all configured agents
-        const stateDir = resolveStateDir();
-        const configPath = path.join(stateDir, "openclaw.json");
-        const configAgents: string[] = [];
-        try {
-          const raw = fs.readFileSync(configPath, "utf-8");
-          const config = JSON.parse(raw);
-          if (config.agents?.list && Array.isArray(config.agents.list)) {
-            for (const a of config.agents.list) {
-              if (a?.id) configAgents.push(a.id);
-            }
-          }
-        } catch { /* config read fail, use db only */ }
-
-        // Merge and deduplicate, config agents first for consistent ordering
-        const merged = [...new Set([...configAgents, ...dbAgents])];
-        if (merged.length === 0) merged.push("main");
-
+        const agents = listAgentIds(db);
         res.statusCode = 200;
         res.setHeader("content-type", "application/json; charset=utf-8");
-        res.end(JSON.stringify({ agents: merged }));
+        res.end(JSON.stringify({ agents }));
       } catch {
         res.statusCode = 200;
         res.setHeader("content-type", "application/json; charset=utf-8");
@@ -365,6 +460,13 @@ function createAdminApiHandler(api: unknown) {
         if (currentSession) {
           try {
             await syncSessionTranscript(db, key, currentSession.session_id);
+            // Recompute group classification from the sessionKey (authoritative).
+            const g = reconcileIsGroup(key);
+            upsertSession(db, {
+              session_key: key,
+              session_id: currentSession.session_id,
+              is_group: g,
+            });
           } catch {
             // ignore sync errors, serve what we have
           }
@@ -405,6 +507,69 @@ function createAdminApiHandler(api: unknown) {
           totalMessages: 0,
           error: `Failed to read messages: ${message}`,
         }));
+      }
+      return true;
+    }
+
+    // Export conversation as a downloadable .txt attachment. We do this
+    // server-side (separate endpoint with Content-Disposition: attachment)
+    // instead of letting the iframe generate a Blob URL because programmatic
+    // <a download>.click() inside a sandboxed iframe is silently blocked by
+    // Chrome — only user-gesture navigations (e.g. window.open) get a real
+    // download. Returns text/plain so window.open(...) saves it directly.
+    if (pathname === "/plugins/session-admin/api/export" && req.method === "GET") {
+      try {
+        const key = url.searchParams.get("key")?.trim();
+        if (!key) {
+          res.statusCode = 400;
+          res.setHeader("content-type", "text/plain; charset=utf-8");
+          res.end("Missing session key\n");
+          return true;
+        }
+        const db = getDb();
+        let session = getSession(db, key);
+        if (!session) syncSessionRegistry(api);
+        session = getSession(db, key);
+        if (!session) {
+          res.statusCode = 404;
+          res.setHeader("content-type", "text/plain; charset=utf-8");
+          res.end("Session not found\n");
+          return true;
+        }
+        // Best-effort incremental sync so the export reflects the latest
+        // transcript before we read it.
+        try {
+          await syncSessionTranscript(db, key, session.session_id);
+          const g = reconcileIsGroup(key);
+          upsertSession(db, {
+            session_key: key,
+            session_id: session.session_id,
+            is_group: g,
+          });
+        } catch {}
+        const result = getMessages(db, key, 100000);
+        const text = buildExportText(session, result.messages);
+        const displayName = session.display_name || session.sender_name || "会话";
+        const safeName = displayName.replace(/[\\/:*?"<>|\r\n\t]+/g, "_").slice(0, 60);
+        const filename = `会话记录_${safeName}_${Date.now()}.txt`;
+        // The header value must be Latin-1 (RFC 7230). Strip non-ASCII chars
+        // from the plain `filename` parameter and put the UTF-8 version in
+        // `filename*` (RFC 5987) for browsers / OSes that honor it.
+        const asciiName = (displayName || "export").replace(/[^\x20-\x7E]+/g, "_").slice(0, 60) || "export";
+        const asciiFilename = `session_${asciiName}_${Date.now()}.txt`;
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/plain; charset=utf-8");
+        res.setHeader(
+          "content-disposition",
+          `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+        );
+        // BOM so macOS / Windows open it in the user's default editor as UTF-8.
+        res.end("\ufeff" + text);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.statusCode = 500;
+        res.setHeader("content-type", "text/plain; charset=utf-8");
+        res.end("Export failed: " + message + "\n");
       }
       return true;
     }
@@ -471,6 +636,7 @@ export default definePluginEntry({
             path: string;
             icon: string;
             group: string;
+            order?: number;
           }) => void;
         };
       };
@@ -491,6 +657,7 @@ export default definePluginEntry({
       path: "/plugins/session-admin",
       icon: "search",
       group: "control",
+      order: 3,
     });
 
     a.registerHttpRoute({

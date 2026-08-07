@@ -5,6 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   getSession,
   insertMessage,
+  renumberSeq,
   updateSyncCursor,
   upsertSession,
   type MessageRow,
@@ -42,6 +43,138 @@ export function extractAgentIdFromSessionKey(sessionKey: string): string {
     return sessionKey.split(":")[1] ?? "main";
   }
   return "main";
+}
+
+/**
+ * The channel a session belongs to, derived from the sessionKey.
+ * openclaw's `entry.origin.provider` is unreliable (it reports "webchat" for
+ * openclaw-weixin sessions), so we trust the key instead.
+ */
+export function channelFromSessionKey(
+  sessionKey: string,
+): "feishu" | "weixin" | "webchat" {
+  if (sessionKey.includes(":feishu:")) return "feishu";
+  if (sessionKey.includes(":openclaw-weixin:")) return "weixin";
+  return "webchat";
+}
+
+export function isImChannel(sessionKey: string): boolean {
+  const ch = channelFromSessionKey(sessionKey);
+  return ch === "feishu" || ch === "weixin";
+}
+
+/** True for raw openclaw/weixin identifiers that are NOT human-readable names. */
+export function looksLikeOpenId(s: string | null | undefined): boolean {
+  if (!s) return false;
+  if (/^ou_[a-zA-Z0-9]+$/.test(s)) return true; // feishu openid
+  if (/@im\.wechat$/.test(s)) return true; // weixin id
+  if (/^oc_[a-zA-Z0-9]+$/.test(s)) return true; // feishu chat/group id
+  if (/^o[A-Za-z0-9_-]{10,}$/.test(s)) return true; // weixin openid form
+  return false;
+}
+
+/**
+ * Pull the counterpart id out of a sessionKey:
+ *   agent:main:feishu:direct:ou_xxx               -> ou_xxx
+ *   agent:main:feishu:group:oc_xxx                -> oc_xxx
+ *   agent:main:openclaw-weixin:direct:o9..@im.wechat -> o9..@im.wechat
+ */
+export function extractSenderId(sessionKey: string): string {
+  const parts = sessionKey.split(":");
+  const last = parts[parts.length - 1] || "";
+  if (looksLikeOpenId(last)) return last;
+  const idx = parts.findIndex((p) => p === "direct" || p === "group");
+  if (idx >= 0 && parts[idx + 1]) return parts[idx + 1];
+  return last || sessionKey;
+}
+
+/**
+ * The "姓名" (sender) column value.
+ *  - WebUI / webchat / dashboard sessions -> "admin"
+ *  - IM (feishu/weixin) with a real name  -> that name
+ *  - IM with only an id available         -> the sender id
+ */
+export function computeSenderName(
+  sessionKey: string,
+  originLabel?: string | null,
+): string {
+  const ch = channelFromSessionKey(sessionKey);
+  if (ch === "webchat") return "admin";
+  if (originLabel && !looksLikeOpenId(originLabel)) return originLabel;
+  return extractSenderId(sessionKey);
+}
+
+/**
+ * The conversation title (list row title). Always non-empty.
+ *  - openclaw-provided displayName first (dashboard first message, feishu group title…)
+ *  - else the counterpart name/id (IM sessions)
+ *  - else a generic channel title
+ */
+export function computeDisplayName(
+  sessionKey: string,
+  displayName?: string | null,
+  senderName?: string | null,
+): string {
+  if (displayName) return displayName;
+  const ch = channelFromSessionKey(sessionKey);
+  if (ch === "webchat") return "Web 会话";
+  return senderName || "会话";
+}
+
+/**
+ * True when openclaw's sessionKey explicitly encodes a group conversation
+ * (e.g. `agent:main:feishu:group:oc_xxx`). OpenClaw already classifies
+ * group vs direct in the key, so this is the authoritative signal.
+ */
+export function isGroupSessionKey(sessionKey: string): boolean {
+  return sessionKey.includes(":group:");
+}
+
+
+
+/**
+ * Decide whether a session is a group chat.
+ *
+ * OpenClaw encodes the group/direct distinction directly in the sessionKey
+ * (`:group:` = group, `:direct:` = direct), so that is the authoritative and
+ * only signal we trust. We deliberately do NOT inspect message content for a
+ * `senderId: text` prefix — Feishu single (direct) chats also store every user
+ * message with that `ou_xxx: ...` prefix, so a content heuristic cannot tell
+ * single from group chats and would misclassify every Feishu direct chat as a
+ * group.
+ *
+ * Returns `1` for a group, `0` for a direct/single chat.
+ */
+export function reconcileIsGroup(sessionKey: string): number {
+  return isGroupSessionKey(sessionKey) ? 1 : 0;
+}
+
+/**
+ * Enumerate all agent directories on disk.
+ *
+ * OpenClaw stores each agent's sessions separately under
+ *   <stateDir>/agents/<agentId>/sessions/
+ * We scan the filesystem for agent directories so we capture EVERY agent that
+ * has transcript data — independent of openclaw.json config changes (which
+ * would otherwise desync historical rows from the current config).
+ */
+export function listAgentDirs(stateDir?: string): string[] {
+  const actualStateDir = stateDir || resolveStateDir();
+  const agentsRoot = path.join(actualStateDir, "agents");
+  if (!fs.existsSync(agentsRoot)) return ["main"];
+  try {
+    const entries = fs.readdirSync(agentsRoot, { withFileTypes: true });
+    const dirs = entries
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .filter((name) => {
+        const sessDir = path.join(agentsRoot, name, "sessions");
+        return fs.existsSync(sessDir);
+      });
+    return dirs.length > 0 ? dirs : ["main"];
+  } catch {
+    return ["main"];
+  }
 }
 
 type TranscriptEvent = {
@@ -235,6 +368,9 @@ export async function syncSessionTranscript(
 
   updateSyncCursor(db, sessionKey, currentOffset);
 
+  // Keep `seq` a contiguous, time-ordered index (see renumberSeq).
+  if (newMessages > 0 || bytesRead > 0) renumberSeq(db, sessionKey);
+
   return { newMessages, newBytes: bytesRead };
 }
 
@@ -269,6 +405,13 @@ export async function syncAllSessions(
         row.session_id,
         stateDir,
       );
+      // Recompute group classification from the sessionKey (authoritative signal).
+      const g = reconcileIsGroup(row.session_key);
+      upsertSession(db, {
+        session_key: row.session_key,
+        session_id: row.session_id,
+        is_group: g,
+      });
       if (result.newMessages > 0) {
         sessionsSynced++;
         totalNewMessages += result.newMessages;
@@ -307,13 +450,10 @@ async function syncTrajectoryFile(
   const startOffset = session?.sync_cursor ?? 0;
   const fileSize = fs.statSync(transcriptPath).size;
 
-  // Safety: if session was previously synced with standard format (has messages)
-  // and sync_cursor is 0, just update cursor to skip re-parsing.
-  if (startOffset === 0 && (session?.message_count ?? 0) > 0) {
-    updateSyncCursor(db, sessionKey, fileSize);
-    return { newMessages: 0, newBytes: 0 };
-  }
-
+  // Do NOT skip when startOffset === 0 && message_count > 0: a /new (or any
+  // sessionId rotation) resets sync_cursor to 0 on purpose, and would otherwise
+  // have its freshly-created transcript skipped here. Re-reading is safe because
+  // message inserts use INSERT OR IGNORE (no duplicate rows).
   if (startOffset >= fileSize) {
     return { newMessages: 0, newBytes: 0 };
   }
@@ -363,7 +503,6 @@ async function syncTrajectoryFile(
 
       const modelId = (evt.modelId as string) ?? null;
       const provider = (evt.provider as string) ?? null;
-      const eventSeq = typeof evt.seq === "number" ? evt.seq : 0;
       const evtTs = typeof evt.ts === "string" ? Date.parse(evt.ts) : 0;
 
       // Accumulate token usage
@@ -391,7 +530,13 @@ async function syncTrajectoryFile(
 
         if (!isMessage) continue;
 
-        const id = `${sessionId}-e${eventSeq}-m${i}`;
+        // Index-based id. Trajectory snapshots are cumulative (later
+        // model.completed events are supersets of earlier ones), and the event
+        // `seq` field is NOT unique per event (multiple events can share seq=5),
+        // so keying on seq would either collide (undercount) or fail to dedupe
+        // (overcount). Index-based ids let INSERT OR IGNORE dedupe identical
+        // messages across cumulative snapshots down to the unique final set.
+        const id = `${sessionId}-m${i}`;
         baseSeq++;
         const contentJson = content !== undefined
           ? JSON.stringify(content)
@@ -449,6 +594,9 @@ async function syncTrajectoryFile(
   }
 
   updateSyncCursor(db, sessionKey, currentOffset);
+
+  // Keep `seq` a contiguous, time-ordered index (see renumberSeq).
+  if (newMessages > 0 || bytesRead > 0) renumberSeq(db, sessionKey);
 
   return { newMessages, newBytes: bytesRead };
 }

@@ -107,6 +107,23 @@ function initSchema(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
   `);
 
+  // Content-level dedup: the same underlying message can be re-ingested by
+  // different parsers (standard .jsonl vs cumulative trajectory) or after a
+  // sessionId rotation (/new). Their generated ids differ, so the primary key
+  // can't catch the duplicates. This unique index guarantees one row per
+  // (session, role, type, timestamp, content-prefix) regardless of source.
+  // Guarded so a stray duplicate in an old DB can't fail schema init.
+  try {
+    db.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_dedup ON messages(" +
+      "session_key, role, type, timestamp, substr(COALESCE(content_json, ''), 1, 200)" +
+      ")",
+    );
+  } catch {
+    // Index already exists, or a residual duplicate blocked creation. Non-fatal:
+    // a follow-up dedup pass can be run; the app still loads.
+  }
+
   // Migrate existing tables that predate the is_group column.
   try {
     db.exec(
@@ -248,8 +265,10 @@ export function upsertSession(
 ): void {
   const existing = getSession(db, row.session_key);
   if (existing) {
+    const sessionIdChanged = existing.session_id !== row.session_id;
     const stmt = db.prepare(`
       UPDATE sessions SET
+        session_id = $session_id,
         label = COALESCE($label, label),
         display_name = COALESCE($display_name, display_name),
         channel = COALESCE($channel, channel),
@@ -266,10 +285,12 @@ export function upsertSession(
     `);
     stmt.run({
       $session_key: row.session_key,
+      $session_id: row.session_id,
       $label: row.label ?? null,
       $display_name: row.display_name ?? null,
       $channel: row.channel ?? null,
       $sender_name: row.sender_name ?? null,
+      $is_group: row.is_group ?? null,
       $status: row.status ?? null,
       $updated_at: row.updated_at ?? null,
       $token_input: row.token_input ?? null,
@@ -278,6 +299,14 @@ export function upsertSession(
       $token_cache_write: row.token_cache_write ?? null,
       $message_count: row.message_count ?? null,
     });
+    // A /new (or any sessionId rotation) points the same session_key at a
+    // brand-new transcript file. The stored sync_cursor is an offset into the
+    // OLD file, so reusing it on the new file would skip everything. Reset to 0
+    // so the next sync reads the new transcript from the top; INSERT OR IGNORE
+    // keeps already-synced history from duplicating.
+    if (sessionIdChanged) {
+      updateSyncCursor(db, row.session_key, 0);
+    }
   } else {
     const stmt = db.prepare(`
       INSERT INTO sessions (
@@ -360,6 +389,30 @@ export function getMessages(
   const messages = (stmt.all(...params) as MessageRow[]).reverse();
 
   return { messages, total };
+}
+
+/**
+ * Renumber a session's messages so `seq` reflects chronological order
+ * (1 = earliest). The standard .jsonl parser and the cumulative trajectory
+ * parser each assign their own independent seq scheme, so when both contribute
+ * rows `ORDER BY seq` becomes meaningless and the timeline scrambles. Calling
+ * this after each sync keeps `seq` a clean, contiguous, time-ordered index that
+ * the messages API and pagination rely on.
+ */
+export function renumberSeq(db: DatabaseSync, sessionKey: string): void {
+  const rows = db
+    .prepare(
+      "SELECT id FROM messages WHERE session_key = ? ORDER BY timestamp ASC, id ASC",
+    )
+    .all(sessionKey) as { id: string }[];
+  if (rows.length === 0) return;
+  const upd = db.prepare(
+    "UPDATE messages SET seq = $seq WHERE session_key = ? AND id = ?",
+  );
+  const tx = db.transaction((rs: { id: string }[]) => {
+    rs.forEach((r, i) => upd.run({ $seq: i + 1, $sessionKey: sessionKey, $id: r.id }));
+  });
+  tx(rows);
 }
 
 export function insertMessage(
