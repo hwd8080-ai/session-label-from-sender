@@ -1,23 +1,40 @@
 # Session Label from Sender
 
-> OpenClaw 会话管理插件 —— 自动标注发送者、SQLite 增量同步、对话详情搜索与复制。
+> OpenClaw 会话管理后台 —— 按渠道 / 用户 / 日期检索对话，并解决 `/new` 之后旧对话在原生后台「消失」的痛点。
 
-`session-label-from-sender` 是一个 OpenClaw 扩展插件，把分散在多个渠道（WebUI、飞书、微信）和多个 agent（main / work / code 等）下的会话集中到一个管理界面里，自动按「发送者」标注，并提供会话搜索、时间线对话查看、全文复制等能力。
+`session-label-from-sender` 是一个 OpenClaw 扩展插件，把分散在多个渠道（WebUI、飞书、微信）下的会话集中到一个管理界面，让管理人可以按**渠道、用户名称、日期**筛选检索会话列表，并查看任意一段对话的完整时间线。它的核心价值在于：以「发送者」维度聚合，使得用户在聊天里执行 `/new` 之后，之前的历史对话依然连贯可查——这是 OpenClaw 原生后台做不到的。
+
+---
+
+## 为什么需要这个插件（目的与价值）
+
+OpenClaw 原生的「会话」是围绕 `sessionId` 组织的，日常使用与管理中存在两个原生后台解决不了的痛点：
+
+1. **后台无法按「渠道 / 用户 / 日期」检索历史对话。** 客服、运营或开发者想回看「某个飞书客户上周聊了什么」「微信里某个用户的所有咨询」，原生界面没有一个集中、可筛选的检索入口，只能翻聊天窗口，难以复盘与追溯。
+2. **`/new` 之后，原生后台看不到旧对话了。** 用户在聊天里发送 `/new`（或任何让 OpenClaw 重建 `sessionId` 的操作）时，OpenClaw 会把旧的 `sessionId.jsonl` 重命名为 `*.jsonl.reset.<ts>.json` 封存，并新建一个 session 写入新文件。对原生后台而言，这是「一段全新会话」，**之前的所有历史对话就此从原生界面消失，无法追溯**。
+
+**这个插件的目的，就是补上这个「会话管理后台」，并且只聚焦于两件事：**
+
+- **① 会话列表查询**：按渠道、用户名称、日期范围筛选检索，快速定位目标客户/会话。
+- **② 会话详情查询**：以时间线方式完整查看一段对话（用户文本、助手回复、思考过程、工具调用/结果）。
+
+**关键设计带来核心价值**：插件以「发送者」维度（`session_key` = agent + 渠道 + 发送者身份，**而不是** OpenClaw 的 `sessionId`）聚合。因此**即使客户多次 `/new`，他所有的历史对话仍归并到同一个人名下，一条记录连贯可查**——彻底解决了 `/new` 后旧对话在原生后台「消失」的痛点。
+
+> 一句话总结价值：**让管理人能在后台，按渠道 / 用户 / 日期，把客户的所有对话（含 `/new` 之前的）完整、连续地查出来。**
 
 ---
 
 ## 功能特性
 
-- **多渠道会话聚合**：自动扫描 `<stateDir>/agents/<agentId>/sessions/` 下的所有 agent 与所有渠道会话（WebUI / 飞书 / 微信等），统一聚合进一张会话列表。
+围绕上述目的，插件提供以下用户侧能力（底层同步 / 去重 / 重排等技术细节见「工作原理要点」）：
+
+- **会话列表查询（核心）**：聚合所有渠道（WebUI / 飞书 / 微信）的所有会话到一张列表，支持按「姓名」「会话标题」「来源渠道」筛选，并支持按时间范围检索。
+- **会话详情查询（核心）**：以时间线方式完整呈现一段对话，包含用户文本、助手回复、思考过程（折叠）、工具调用 / 工具结果（工具卡）。
 - **发送者自动标注**：
   - 通过 WebUI 创建的会话，发送者统一显示为 `admin`；
   - 飞书 / 微信等 IM 渠道，能拿到真实昵称就显示昵称，否则退化为显示发送人 ID（openid / 微信号等）。
-- **增量同步（SQLite）**：直接读取 OpenClaw 原生的 JSONL 转录文件，按字节偏移（`sync_cursor`）做增量同步，只解析新增内容，性能稳定。
-- **会话搜索与筛选**：按「姓名」、「会话标题」、「来源渠道」筛选；支持按时间范围检索。
-- **对话详情查看**：以时间线方式完整呈现一段对话，包含用户文本、助手回复、思考过程（折叠）、工具调用 / 工具结果（工具卡）。
-- **全文复制**：一键把整段对话复制到剪贴板（详见「已知平台限制」）。
-- **`/new` 会话旋转自愈**：执行 `/new`（或任何让 OpenClaw 重建 sessionId 的操作）后，新消息能自动同步进来，不会卡在旧历史。
-- **内容级去重 + 时间线重排**：多套解析器、sessionId 旋转可能产生的重复消息与乱序，由内容级唯一索引与按时间戳重排 `seq` 根治。
+- **全文复制**：一键把整段对话复制到剪贴板（受插件 iframe 沙盒限制，下载降级为复制，详见「已知平台限制」）。
+- **`/new` 会话旋转自愈**：执行 `/new` 后，新消息能自动同步进来并归并到同一发送者记录，不会卡在旧历史。
 
 ---
 
@@ -92,16 +109,18 @@ openclaw daemon restart
 1. **文件下载不可行 → 降级为「复制全文」**
    OpenClaw 给插件 iframe 的 sandbox 只有 `allow-scripts`，**没有** `allow-downloads` / `allow-popups`。因此浏览器会静默拦截插件内触发的文件下载。插件改为「复制全文」按钮（`navigator.clipboard` + `execCommand` 兜底），把整段对话复制到剪贴板。
 
-2. **首屏 strict 沙盒竞态 → 服务端渲染兜底**
-   WebUI 首屏 iframe 的 sandbox 默认是 `strict`（禁脚本），真正允许脚本的 `scripts` 配置是异步到达的，已用 strict 建好的 iframe 不会追溯生效，表现为「硬刷新一次会短暂报错、切走再切回才正常」。
-   插件采用**服务端渲染（SSR）**根治：数据直接渲染进 HTML，翻页 / 筛选 / 进入详情用 `<a>` 链接，同步用 `?sync=1`（服务端 302 回干净 URL）——静态 HTML + 链接导航在 strict 沙盒下也完整可用，脚本仅作增强。
+2. **首屏 strict 沙盒竞态（未根治：根因在 OpenClaw 主程序 + 插件降级兜底）**
+   **根因不在插件，在 OpenClaw 主程序**：`ui/src/pages/plugin/plugin-page.ts` 用 `@consume({context:applicationContext, subscribe:false})` 读取沙盒配置。首屏应用上下文（含 `gateway.controlUi.embedSandbox` 是否放行脚本）往往尚未加载完，于是 iframe 以默认的 `strict` 沙盒（禁脚本）建立；又因 `subscribe:false` 不订阅后续更新，**已建好的严格沙盒不会追溯放开脚本**。表现即：硬刷新插件页一次会报 `Blocked script execution ... allow-scripts not set`，页面脚本不执行（关键字搜索 / 消息内查找 / 复制全文等交互失效），切走再切回才正常。
+   **当前状态：未解决**。该问题只能改 OpenClaw 主仓库（`subscribe:false` 改为订阅，或等配置就绪再渲染 iframe）才能根除，插件作为扩展无法绕过。
+   **插件侧的降级兜底（注意：非根治）**：鉴于首屏可能落在严格沙盒里，插件用**服务端渲染（SSR）**保证"静态可用"——数据直接渲染进 HTML，翻页 / 筛选 / 进入详情用 `<a>` 链接，同步用 `?sync=1`（服务端 302 回干净 URL）。这样即便脚本被禁，列表 / 筛选 / 详情 / 同步仍可通过纯链接完成；但**交互增强在脚本恢复前不可用，且硬刷新报错本身不会因 SSR 而消失**。
+   **临时规避（不稳定）**：报错后切到别的菜单再切回插件 Tab，或进 Tab 前先逛一下首页让配置加载完，通常可让脚本沙盒生效；仍偶发，非稳定方案。
 
 ---
 
 ## 工作原理要点
 
-- **增量同步**：`sync.ts` 按 `session_key`（如 `agent:main:feishu:direct:ou_xxx`）记录每个会话的 JSONL 字节偏移 `sync_cursor`，下次只解析新增部分。
-- **`/new` 会话旋转修复**：`/new` 会让 OpenClaw 把旧 `sessionId.jsonl` 重命名为 `*.jsonl.reset.<ts>.json`（封存旧历史）并新建 session 写新文件。插件在 `session_id` 变化时自动把 `sync_cursor` 归零，确保新文件从 0 重读。
+- **按发送者聚合（解决 `/new` 痛点）**：`session_key` 格式为 `agent:main:feishu:direct:ou_xxx`（基于 agent + 渠道 + 发送者身份生成，**不含 sessionId**）。`/new` 只会旋转底层 `sessionId`（transcript 文件名变、旧文件封存为 `*.reset.<ts>.json`），`session_key` 不变。插件以 `session_key` 为主键，检测到 `session_id` 变化即重置 `sync_cursor` 从新文件重读，再经 `renumberSeq` 按时间戳排成连续时间线——于是同一客户无论 `/new` 几次，历史都归并到同一条记录。
+- **增量同步**：`sync.ts` 按 `session_key` 记录每个会话 JSONL 的字节偏移 `sync_cursor`，下次只解析新增部分。
 - **重复消息根治**：插件有两套解析器（标准 `.jsonl` 用 OpenClaw 原生短哈希 id；`.trajectory.jsonl` 用 `${sessionId}-m${i}` id），id 方案不同会导致 `INSERT OR IGNORE` 拦不住重复。改用**内容级唯一索引**（`session_key, role, type, timestamp, substr(content_json,1,200)`）去重。
 - **时间线乱序根治**：各解析器各自分配的 `seq` 范围交叠、不可信。`sync` 后用 `renumberSeq()` 按 `timestamp ASC, id ASC` 把该会话 `seq` 重排为 1..N 连续，保证 `ORDER BY seq` 等于时间线。
 
@@ -119,7 +138,7 @@ openclaw daemon restart
 
 - GitHub：<https://github.com/hwd8080-ai/session-label-from-sender>
 - ClawHub：`@hwd8080-ai/session-label-from-sender`
-- 版本：`2026.8.7`（兼容 `pluginApi >= 2026.7.1`）
+- 版本：`2026.8.9`（兼容 `pluginApi >= 2026.7.1`）
 
 ---
 

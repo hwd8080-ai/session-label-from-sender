@@ -248,7 +248,7 @@ function createAdminPageHandler(api: unknown) {
       const msearch = params.get("msearch")?.trim() || undefined;
       const result = getMessages(db, sessionKey, 300, undefined, msearch);
       if (params.get("dl") === "1") {
-        const text = buildExportText(detail, result.messages);
+        const text = buildExportText(detail, result.messages).text;
         res.statusCode = 200;
         res.setHeader("content-type", "text/plain; charset=utf-8");
         res.setHeader("content-disposition", "attachment; filename=\"conversation_" + encodeURIComponent(sessionKey) + ".txt\"");
@@ -548,7 +548,11 @@ function createAdminApiHandler(api: unknown) {
           });
         } catch {}
         const result = getMessages(db, key, 100000);
-        const text = buildExportText(session, result.messages);
+        // 单会话导出上限 10MB：超过则截断并提示，避免超大会话打爆内存 / 剪贴板卡死。
+        const EXPORT_BYTE_BUDGET = 10 * 1024 * 1024;
+        const built = buildExportText(session, result.messages, EXPORT_BYTE_BUDGET);
+        const text = built.text;
+        const truncated = built.truncated;
         const displayName = session.display_name || session.sender_name || "会话";
         const safeName = displayName.replace(/[\\/:*?"<>|\r\n\t]+/g, "_").slice(0, 60);
         const filename = `会话记录_${safeName}_${Date.now()}.txt`;
@@ -563,6 +567,7 @@ function createAdminApiHandler(api: unknown) {
           "content-disposition",
           `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
         );
+        if (truncated) res.setHeader("X-Export-Truncated", "1");
         // BOM so macOS / Windows open it in the user's default editor as UTF-8.
         res.end("\ufeff" + text);
       } catch (err) {
