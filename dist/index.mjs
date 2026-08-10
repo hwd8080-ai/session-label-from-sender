@@ -692,8 +692,8 @@ var CSS = `:root{--ink:#252421;--muted:#78746d;--line:#e8e3da;--paper:#fffefa;--
 .date-divider{position:sticky;top:0;z-index:4;display:flex;align-items:center;justify-content:center;padding:10px 0;margin:4px 0 14px;pointer-events:none}
 .date-divider::before,.date-divider::after{content:"";flex:1;height:1px;background:var(--line);margin:0 12px}
 .date-divider span{background:var(--paper);color:var(--muted);font-size:12px;font-weight:600;padding:4px 12px;border-radius:999px;border:1px solid var(--line);box-shadow:0 1px 3px rgba(37,36,33,.06)}
-.jump-nav{position:fixed;right:18px;top:90px;bottom:80px;width:36px;z-index:20;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
-.jump-btn{pointer-events:auto;width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.95);color:var(--muted);font-size:16px;line-height:1;display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 14px rgba(40,36,30,.14);transition:background .15s,color .15s,transform .1s}
+.jump-nav{position:fixed;right:16px;bottom:68px;z-index:20;display:flex;pointer-events:none}
+.jump-btn{pointer-events:auto;display:inline-flex;align-items:center;gap:4px;height:40px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.95);color:var(--ink);font-size:13px;font-weight:600;line-height:1;white-space:nowrap;cursor:pointer;box-shadow:0 4px 14px rgba(40,36,30,.14);transition:background .15s,color .15s,transform .1s}
 .jump-btn:hover{background:var(--teal);color:#fff;border-color:var(--teal);transform:translateY(-1px)}
 .jump-btn:active{transform:translateY(0)}
 #msgTop,#msgBottom{height:0}
@@ -1199,7 +1199,7 @@ function buildListHtml(state) {
   lines.push("    </header>");
   lines.push('    <div class="meta" id="meta"></div>');
   lines.push('    <div class="jump-nav" aria-label="\u6D88\u606F\u8DF3\u8F6C">');
-  lines.push('      <button class="jump-btn" id="jumpTop" aria-label="\u5230\u6700\u65E9\u7684\u6D88\u606F">\u25B2</button>');
+  lines.push('      <button class="jump-btn" id="jumpTop" aria-label="\u5230\u6700\u65E9\u7684\u6D88\u606F">\u25B2 \u9876\u90E8</button>');
   lines.push("    </div>");
   lines.push('    <div class="messages" id="messages"></div>');
   lines.push('    <button class="fab" id="fabCopy" aria-label="\u590D\u5236\u5168\u6587\u5230\u526A\u8D34\u677F">\u2197 \u590D\u5236\u5168\u6587</button>');
@@ -1405,7 +1405,7 @@ function buildDetailHtml(state) {
   else L.push(renderMessagesHtml(msgs));
   L.push("  </div></div></section>");
   L.push('  <div class="jump-nav" aria-label="\u6D88\u606F\u8DF3\u8F6C">');
-  L.push('    <a class="jump-btn" href="#msgTop" aria-label="\u5230\u6700\u65E9\u7684\u6D88\u606F">\u25B2</a>');
+  L.push('    <a class="jump-btn" href="#msgTop" aria-label="\u5230\u6700\u65E9\u7684\u6D88\u606F">\u25B2 \u9876\u90E8</a>');
   L.push("  </div>");
   L.push("</main>");
   L.push("</body>");
