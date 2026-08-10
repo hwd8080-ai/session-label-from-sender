@@ -407,7 +407,7 @@ export function renumberSeq(db: DatabaseSync, sessionKey: string): void {
     .all(sessionKey) as { id: string }[];
   if (rows.length === 0) return;
   const upd = db.prepare(
-    "UPDATE messages SET seq = $seq WHERE session_key = ? AND id = ?",
+    "UPDATE messages SET seq = $seq WHERE session_key = $sessionKey AND id = $id",
   );
   // DatabaseSync has no .transaction(); run updates in a loop.
   rows.forEach((r, i) =>

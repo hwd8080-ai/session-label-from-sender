@@ -282,7 +282,7 @@ function renumberSeq(db, sessionKey) {
   ).all(sessionKey);
   if (rows.length === 0) return;
   const upd = db.prepare(
-    "UPDATE messages SET seq = $seq WHERE session_key = ? AND id = ?"
+    "UPDATE messages SET seq = $seq WHERE session_key = $sessionKey AND id = $id"
   );
   rows.forEach(
     (r, i) => upd.run({ $seq: i + 1, $sessionKey: sessionKey, $id: r.id })
