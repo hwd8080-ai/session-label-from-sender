@@ -1600,7 +1600,7 @@ function createAdminPageHandler(api) {
       const msearch = params.get("msearch")?.trim() || void 0;
       const result = getMessages(db, sessionKey, 300, void 0, msearch);
       if (params.get("dl") === "1") {
-        const text = buildExportText(detail, result.messages);
+        const text = buildExportText(detail, result.messages).text;
         res.statusCode = 200;
         res.setHeader("content-type", "text/plain; charset=utf-8");
         res.setHeader("content-disposition", 'attachment; filename="conversation_' + encodeURIComponent(sessionKey) + '.txt"');
@@ -1870,7 +1870,10 @@ function createAdminApiHandler(api) {
         } catch {
         }
         const result = getMessages(db, key, 1e5);
-        const text = buildExportText(session, result.messages);
+        const EXPORT_BYTE_BUDGET = 10 * 1024 * 1024;
+        const built = buildExportText(session, result.messages, EXPORT_BYTE_BUDGET);
+        const text = built.text;
+        const truncated = built.truncated;
         const displayName = session.display_name || session.sender_name || "\u4F1A\u8BDD";
         const safeName = displayName.replace(/[\\/:*?"<>|\r\n\t]+/g, "_").slice(0, 60);
         const filename = `\u4F1A\u8BDD\u8BB0\u5F55_${safeName}_${Date.now()}.txt`;
@@ -1882,6 +1885,7 @@ function createAdminApiHandler(api) {
           "content-disposition",
           `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
         );
+        if (truncated) res.setHeader("X-Export-Truncated", "1");
         res.end("\uFEFF" + text);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
