@@ -409,10 +409,10 @@ export function renumberSeq(db: DatabaseSync, sessionKey: string): void {
   const upd = db.prepare(
     "UPDATE messages SET seq = $seq WHERE session_key = ? AND id = ?",
   );
-  const tx = db.transaction((rs: { id: string }[]) => {
-    rs.forEach((r, i) => upd.run({ $seq: i + 1, $sessionKey: sessionKey, $id: r.id }));
-  });
-  tx(rows);
+  // DatabaseSync has no .transaction(); run updates in a loop.
+  rows.forEach((r, i) =>
+    upd.run({ $seq: i + 1, $sessionKey: sessionKey, $id: r.id }),
+  );
 }
 
 export function insertMessage(

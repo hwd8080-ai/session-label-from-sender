@@ -284,10 +284,9 @@ function renumberSeq(db, sessionKey) {
   const upd = db.prepare(
     "UPDATE messages SET seq = $seq WHERE session_key = ? AND id = ?"
   );
-  const tx = db.transaction((rs) => {
-    rs.forEach((r, i) => upd.run({ $seq: i + 1, $sessionKey: sessionKey, $id: r.id }));
-  });
-  tx(rows);
+  rows.forEach(
+    (r, i) => upd.run({ $seq: i + 1, $sessionKey: sessionKey, $id: r.id })
+  );
 }
 function insertMessage(db, row) {
   const stmt = db.prepare(`
