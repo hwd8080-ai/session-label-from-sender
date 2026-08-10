@@ -458,8 +458,10 @@ function createAdminApiHandler(api: unknown) {
 
         const beforeSeq = url.searchParams.get("beforeSeq")?.trim();
         const before = beforeSeq ? parseInt(beforeSeq, 10) : undefined;
+        const afterSeq = url.searchParams.get("afterSeq")?.trim();
+        const after = afterSeq ? parseInt(afterSeq, 10) : undefined;
         const search = url.searchParams.get("search")?.trim() || undefined;
-        const result = getMessages(db, key, limit, before, search);
+        const result = getMessages(db, key, limit, before, search, after);
         res.statusCode = 200;
         res.setHeader("content-type", "application/json; charset=utf-8");
         res.end(JSON.stringify({

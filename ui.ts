@@ -23,6 +23,8 @@ function buildJs() {
   js.push("var msgAllLoaded = false;");
   js.push("var msgLoading = false;");
   js.push("var oldestSeq = null;");
+  js.push("var msgMode = 'desc';"); // 'desc' = 最新在底（默认向上滚加载更早）；'asc' = 最早在顶（向下滚加载更新）
+  js.push("var newestSeq = null;");
   js.push("var msgHighlight = null;");
   js.push("var currentMatchIdx = -1;");
   js.push("");
@@ -125,8 +127,7 @@ function buildJs() {
   js.push("  html += '<div id=\"msgBottom\"></div>';");
   js.push("  return html;");
   js.push("}");
-  js.push("function jumpToTop(){ var box = $('messages'); if (box) box.scrollTop = 0; }");
-  js.push("function jumpToBottom(){ var box = $('messages'); if (box) box.scrollTop = box.scrollHeight - box.clientHeight; }");
+  js.push("async function jumpToTop(){ var box = $('messages'); if (!box) return; if (msgMode === 'asc') { box.scrollTop = 0; return; } msgMode = 'asc'; msgAllLoaded = false; newestSeq = null; currentMessages = []; msgOffset = 0; box.innerHTML = '<div class=\"loading\"><div class=\"spinner\"></div><br>加载最早消息…</div>'; await loadMoreMessages(); box.scrollTop = 0; }");
   js.push("function renderTable(rows){");
   js.push("  var tbody = $('rows');");
   js.push("  if (!rows.length) { tbody.innerHTML = ''; $('empty').style.display = 'block'; $('rows').closest('table').style.display = 'none'; return; }");
@@ -228,7 +229,7 @@ function buildJs() {
   js.push("  if (currentSession) {");
   js.push("    $('meta').innerHTML = '<div><span>Agent</span><strong>' + esc(agentLabel(currentSession.agent_id)) + '</strong></div>' + '<div><span>用户</span><strong>' + esc(currentSession.sender_name || currentSession.label || '-') + '</strong></div>' + '<div><span>来源</span><strong>' + esc(sourceLabel(currentSession.channel)) + '</strong></div>' + '<div><span>分类</span><strong>' + esc(catLabel(currentSession)) + '</strong></div>';");
   js.push("  }");
-  js.push("  msgOffset = 0; msgAllLoaded = false; oldestSeq = null; msgHighlight = null; currentMessages = [];");
+  js.push("  msgOffset = 0; msgAllLoaded = false; oldestSeq = null; newestSeq = null; msgMode = 'desc'; msgHighlight = null; currentMessages = [];");
   js.push("  $('messages').innerHTML = '';");
   js.push("  await loadMoreMessages();");
   js.push("  setupMsgScroll();");
@@ -243,24 +244,35 @@ function buildJs() {
   js.push("    var params = new URLSearchParams();");
   js.push("    params.set('key', selectedKey);");
   js.push("    params.set('limit', '30');");
-  js.push("    if (oldestSeq != null) params.set('beforeSeq', String(oldestSeq));");
+  js.push("    if (msgMode === 'asc') { params.set('afterSeq', String(newestSeq == null ? 0 : newestSeq)); }");
+  js.push("    else { if (oldestSeq != null) params.set('beforeSeq', String(oldestSeq)); }");
   js.push("    params.set('offset', String(msgOffset));");
   js.push("    var res = await fetch(API + '/messages?' + params.toString());");
   js.push("    if (!res.ok) throw new Error('HTTP ' + res.status);");
   js.push("    var data = await res.json();");
   js.push("    var msgs = data.messages || [];");
-  js.push("    msgTotal = data.total || msgs.length;");
+  js.push("    msgTotal = data.totalMessages || msgs.length;");
   js.push("  if (msgs.length === 0 && msgOffset === 0) { box.innerHTML = '<div class=\"loading\">该会话暂无消息</div>'; msgAllLoaded = true; msgLoading = false; return; }");
   js.push("    if (msgs.length < 30) { msgAllLoaded = true; }");
   js.push("    var more = $('msgMore'); if (more) more.remove();");
-  js.push("    if (msgOffset === 0) { currentMessages = msgs; }");
-  js.push("    else { currentMessages = msgs.concat(currentMessages); }");
-  js.push("    var fromBottom = box.scrollHeight - box.scrollTop;");
-  js.push("    box.innerHTML = renderMessages(currentMessages);");
-  js.push("    if (msgOffset === 0) { box.scrollTop = box.scrollHeight - box.clientHeight; }");
-  js.push("    else { box.scrollTop = box.scrollHeight - fromBottom; }");
+  js.push("    if (msgMode === 'asc') {");
+  js.push("      if (msgOffset === 0) { currentMessages = msgs; }");
+  js.push("      else { currentMessages = currentMessages.concat(msgs); }");
+  js.push("      var atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 2;");
+  js.push("      box.innerHTML = renderMessages(currentMessages);");
+  js.push("      if (msgOffset === 0) { box.scrollTop = 0; }");
+  js.push("      else if (atBottom) { box.scrollTop = box.scrollHeight; }");
+  js.push("      if (msgs.length && (newestSeq == null || msgs[msgs.length-1].seq > newestSeq)) newestSeq = msgs[msgs.length-1].seq;");
+  js.push("    } else {");
+  js.push("      if (msgOffset === 0) { currentMessages = msgs; }");
+  js.push("      else { currentMessages = msgs.concat(currentMessages); }");
+  js.push("      var fromBottom = box.scrollHeight - box.scrollTop;");
+  js.push("      box.innerHTML = renderMessages(currentMessages);");
+  js.push("      if (msgOffset === 0) { box.scrollTop = box.scrollHeight - box.clientHeight; }");
+  js.push("      else { box.scrollTop = box.scrollHeight - fromBottom; }");
+  js.push("      if (msgs.length && (oldestSeq == null || msgs[0].seq < oldestSeq)) oldestSeq = msgs[0].seq;");
+  js.push("    }");
   js.push("    msgOffset += msgs.length;");
-  js.push("    if (msgs.length && (oldestSeq == null || msgs[0].seq < oldestSeq)) oldestSeq = msgs[0].seq;");
   js.push("  } catch (e) {");
   js.push("    var more = $('msgMore'); if (more) more.remove();");
   js.push("    if (msgOffset === 0) { box.innerHTML = '<div class=\"loading\" id=\"msgErr\">加载失败：' + esc(e.message) + '<br><button class=\"detail\" id=\"retryBtn\">重试</button></div>'; var rb = $('retryBtn'); if (rb) rb.addEventListener('click', function(){ openDrawer(selectedKey); }); }");
@@ -271,9 +283,11 @@ function buildJs() {
   js.push("function setupMsgScroll(){");
   js.push("  var box = $('messages');");
   js.push("  box.onscroll = function(){");
-  js.push("    if (!msgAllLoaded && !msgLoading && box.scrollTop < 80) { loadMoreMessages(); }");
+  js.push("    if (msgLoading || msgAllLoaded) return;");
+  js.push("    if (msgMode === 'asc') { if (box.scrollTop + box.clientHeight > box.scrollHeight - 80) { loadMoreMessages(); } }");
+  js.push("    else { if (box.scrollTop < 80) { loadMoreMessages(); } }");
   js.push("  };");
-  js.push("}");;
+  js.push("}");
   js.push("function closeDrawer(){");
   js.push("  $('layer').classList.remove('open');");
   js.push("  document.body.style.overflow = '';");
@@ -343,6 +357,7 @@ function buildJs() {
 
   js.push("async function doMsgSearch(){");
   js.push("  var q = $('msgSearch').value.trim().toLowerCase();");
+  js.push("  msgMode = 'desc'; msgAllLoaded = false; oldestSeq = null; newestSeq = null; msgOffset = 0; currentMessages = [];");
   js.push("  var count = $('searchCount'); var clear = $('searchClear');");
   js.push("  var box = $('messages');");
   js.push("  if (!q) {");
@@ -396,7 +411,6 @@ function buildJs() {
 
   js.push("  $('fabCopy').addEventListener('click', exportConv);");
   js.push("  var jt = document.getElementById('jumpTop'); if (jt) jt.addEventListener('click', jumpToTop);");
-  js.push("  var jb = document.getElementById('jumpBottom'); if (jb) jb.addEventListener('click', jumpToBottom);");
   js.push("  updateAgentText();");
   js.push("  updateSourceText();");
   js.push("  loadAgents();");
@@ -492,8 +506,7 @@ function buildListHtml(state) {
   lines.push("    </header>");
   lines.push("    <div class=\"meta\" id=\"meta\"></div>");
   lines.push("    <div class=\"jump-nav\" aria-label=\"消息跳转\">");
-  lines.push("      <button class=\"jump-btn\" id=\"jumpTop\" aria-label=\"到最老的消息\">▲</button>");
-  lines.push("      <button class=\"jump-btn\" id=\"jumpBottom\" aria-label=\"到最新的消息\">▼</button>");
+  lines.push("      <button class=\"jump-btn\" id=\"jumpTop\" aria-label=\"到最早的消息\">▲</button>");
   lines.push("    </div>");
   lines.push("    <div class=\"messages\" id=\"messages\"></div>");
   lines.push("    <button class=\"fab\" id=\"fabCopy\" aria-label=\"复制全文到剪贴板\">↗ 复制全文</button>");
@@ -685,8 +698,7 @@ function buildDetailHtml(state) {
   else L.push(renderMessagesHtml(msgs));
   L.push("  </div></div></section>");
   L.push("  <div class=\"jump-nav\" aria-label=\"消息跳转\">");
-  L.push("    <a class=\"jump-btn\" href=\"#msgTop\" aria-label=\"到最老的消息\">▲</a>");
-  L.push("    <a class=\"jump-btn\" href=\"#msgBottom\" aria-label=\"到最新的消息\">▼</a>");
+  L.push("    <a class=\"jump-btn\" href=\"#msgTop\" aria-label=\"到最早的消息\">▲</a>");
   L.push("  </div>");
   L.push("</main>");
   L.push("</body>");

@@ -361,6 +361,7 @@ export function getMessages(
   limit: number = 200,
   beforeSeq?: number,
   search?: string,
+  afterSeq?: number,
 ): { messages: MessageRow[]; total: number } {
   const whereParts: string[] = ["session_key = ?"];
   const params: (string | number)[] = [sessionKey];
@@ -368,6 +369,10 @@ export function getMessages(
   if (beforeSeq !== undefined) {
     whereParts.push("seq < ?");
     params.push(beforeSeq);
+  }
+  if (afterSeq !== undefined) {
+    whereParts.push("seq > ?");
+    params.push(afterSeq);
   }
   if (search) {
     whereParts.push("content_json LIKE ?");
@@ -380,13 +385,30 @@ export function getMessages(
   const countRow = countStmt.get(...params) as { cnt: number };
   const total = countRow?.cnt ?? 0;
 
-  const stmt = db.prepare(`
-    SELECT * FROM messages
-    WHERE ${where}
-    ORDER BY seq DESC
-    LIMIT ${limit}
-  `);
-  const messages = (stmt.all(...params) as MessageRow[]).reverse();
+  let messages: MessageRow[];
+  if (afterSeq !== undefined) {
+    // Ascending mode: fetch the earliest messages with seq > afterSeq, in
+    // chronological order (no reverse needed). Powers "jump to oldest" then
+    // scroll-down-for-newer pagination.
+    const stmt = db.prepare(`
+      SELECT * FROM messages
+      WHERE ${where}
+      ORDER BY seq ASC
+      LIMIT ${limit}
+    `);
+    messages = stmt.all(...params) as MessageRow[];
+  } else {
+    // Descending mode (default): fetch the latest messages with seq < beforeSeq
+    // (or the latest overall), then reverse so the client receives them in
+    // chronological order.
+    const stmt = db.prepare(`
+      SELECT * FROM messages
+      WHERE ${where}
+      ORDER BY seq DESC
+      LIMIT ${limit}
+    `);
+    messages = (stmt.all(...params) as MessageRow[]).reverse();
+  }
 
   return { messages, total };
 }

@@ -252,12 +252,16 @@ function updateSyncCursor(db, sessionKey, cursor) {
     `UPDATE sessions SET sync_cursor = ${cursor}, synced_at = ${Date.now()} WHERE session_key = '${sessionKey}'`
   );
 }
-function getMessages(db, sessionKey, limit = 200, beforeSeq, search) {
+function getMessages(db, sessionKey, limit = 200, beforeSeq, search, afterSeq) {
   const whereParts = ["session_key = ?"];
   const params = [sessionKey];
   if (beforeSeq !== void 0) {
     whereParts.push("seq < ?");
     params.push(beforeSeq);
+  }
+  if (afterSeq !== void 0) {
+    whereParts.push("seq > ?");
+    params.push(afterSeq);
   }
   if (search) {
     whereParts.push("content_json LIKE ?");
@@ -267,13 +271,24 @@ function getMessages(db, sessionKey, limit = 200, beforeSeq, search) {
   const countStmt = db.prepare(`SELECT COUNT(*) as cnt FROM messages WHERE ${where}`);
   const countRow = countStmt.get(...params);
   const total = countRow?.cnt ?? 0;
-  const stmt = db.prepare(`
-    SELECT * FROM messages
-    WHERE ${where}
-    ORDER BY seq DESC
-    LIMIT ${limit}
-  `);
-  const messages = stmt.all(...params).reverse();
+  let messages;
+  if (afterSeq !== void 0) {
+    const stmt = db.prepare(`
+      SELECT * FROM messages
+      WHERE ${where}
+      ORDER BY seq ASC
+      LIMIT ${limit}
+    `);
+    messages = stmt.all(...params);
+  } else {
+    const stmt = db.prepare(`
+      SELECT * FROM messages
+      WHERE ${where}
+      ORDER BY seq DESC
+      LIMIT ${limit}
+    `);
+    messages = stmt.all(...params).reverse();
+  }
   return { messages, total };
 }
 function renumberSeq(db, sessionKey) {
@@ -703,6 +718,8 @@ function buildJs() {
   js.push("var msgAllLoaded = false;");
   js.push("var msgLoading = false;");
   js.push("var oldestSeq = null;");
+  js.push("var msgMode = 'desc';");
+  js.push("var newestSeq = null;");
   js.push("var msgHighlight = null;");
   js.push("var currentMatchIdx = -1;");
   js.push("");
@@ -805,8 +822,7 @@ function buildJs() {
   js.push(`  html += '<div id="msgBottom"></div>';`);
   js.push("  return html;");
   js.push("}");
-  js.push("function jumpToTop(){ var box = $('messages'); if (box) box.scrollTop = 0; }");
-  js.push("function jumpToBottom(){ var box = $('messages'); if (box) box.scrollTop = box.scrollHeight - box.clientHeight; }");
+  js.push(`async function jumpToTop(){ var box = $('messages'); if (!box) return; if (msgMode === 'asc') { box.scrollTop = 0; return; } msgMode = 'asc'; msgAllLoaded = false; newestSeq = null; currentMessages = []; msgOffset = 0; box.innerHTML = '<div class="loading"><div class="spinner"></div><br>\u52A0\u8F7D\u6700\u65E9\u6D88\u606F\u2026</div>'; await loadMoreMessages(); box.scrollTop = 0; }`);
   js.push("function renderTable(rows){");
   js.push("  var tbody = $('rows');");
   js.push("  if (!rows.length) { tbody.innerHTML = ''; $('empty').style.display = 'block'; $('rows').closest('table').style.display = 'none'; return; }");
@@ -908,7 +924,7 @@ function buildJs() {
   js.push("  if (currentSession) {");
   js.push("    $('meta').innerHTML = '<div><span>Agent</span><strong>' + esc(agentLabel(currentSession.agent_id)) + '</strong></div>' + '<div><span>\u7528\u6237</span><strong>' + esc(currentSession.sender_name || currentSession.label || '-') + '</strong></div>' + '<div><span>\u6765\u6E90</span><strong>' + esc(sourceLabel(currentSession.channel)) + '</strong></div>' + '<div><span>\u5206\u7C7B</span><strong>' + esc(catLabel(currentSession)) + '</strong></div>';");
   js.push("  }");
-  js.push("  msgOffset = 0; msgAllLoaded = false; oldestSeq = null; msgHighlight = null; currentMessages = [];");
+  js.push("  msgOffset = 0; msgAllLoaded = false; oldestSeq = null; newestSeq = null; msgMode = 'desc'; msgHighlight = null; currentMessages = [];");
   js.push("  $('messages').innerHTML = '';");
   js.push("  await loadMoreMessages();");
   js.push("  setupMsgScroll();");
@@ -923,24 +939,35 @@ function buildJs() {
   js.push("    var params = new URLSearchParams();");
   js.push("    params.set('key', selectedKey);");
   js.push("    params.set('limit', '30');");
-  js.push("    if (oldestSeq != null) params.set('beforeSeq', String(oldestSeq));");
+  js.push("    if (msgMode === 'asc') { params.set('afterSeq', String(newestSeq == null ? 0 : newestSeq)); }");
+  js.push("    else { if (oldestSeq != null) params.set('beforeSeq', String(oldestSeq)); }");
   js.push("    params.set('offset', String(msgOffset));");
   js.push("    var res = await fetch(API + '/messages?' + params.toString());");
   js.push("    if (!res.ok) throw new Error('HTTP ' + res.status);");
   js.push("    var data = await res.json();");
   js.push("    var msgs = data.messages || [];");
-  js.push("    msgTotal = data.total || msgs.length;");
+  js.push("    msgTotal = data.totalMessages || msgs.length;");
   js.push(`  if (msgs.length === 0 && msgOffset === 0) { box.innerHTML = '<div class="loading">\u8BE5\u4F1A\u8BDD\u6682\u65E0\u6D88\u606F</div>'; msgAllLoaded = true; msgLoading = false; return; }`);
   js.push("    if (msgs.length < 30) { msgAllLoaded = true; }");
   js.push("    var more = $('msgMore'); if (more) more.remove();");
-  js.push("    if (msgOffset === 0) { currentMessages = msgs; }");
-  js.push("    else { currentMessages = msgs.concat(currentMessages); }");
-  js.push("    var fromBottom = box.scrollHeight - box.scrollTop;");
-  js.push("    box.innerHTML = renderMessages(currentMessages);");
-  js.push("    if (msgOffset === 0) { box.scrollTop = box.scrollHeight - box.clientHeight; }");
-  js.push("    else { box.scrollTop = box.scrollHeight - fromBottom; }");
+  js.push("    if (msgMode === 'asc') {");
+  js.push("      if (msgOffset === 0) { currentMessages = msgs; }");
+  js.push("      else { currentMessages = currentMessages.concat(msgs); }");
+  js.push("      var atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 2;");
+  js.push("      box.innerHTML = renderMessages(currentMessages);");
+  js.push("      if (msgOffset === 0) { box.scrollTop = 0; }");
+  js.push("      else if (atBottom) { box.scrollTop = box.scrollHeight; }");
+  js.push("      if (msgs.length && (newestSeq == null || msgs[msgs.length-1].seq > newestSeq)) newestSeq = msgs[msgs.length-1].seq;");
+  js.push("    } else {");
+  js.push("      if (msgOffset === 0) { currentMessages = msgs; }");
+  js.push("      else { currentMessages = msgs.concat(currentMessages); }");
+  js.push("      var fromBottom = box.scrollHeight - box.scrollTop;");
+  js.push("      box.innerHTML = renderMessages(currentMessages);");
+  js.push("      if (msgOffset === 0) { box.scrollTop = box.scrollHeight - box.clientHeight; }");
+  js.push("      else { box.scrollTop = box.scrollHeight - fromBottom; }");
+  js.push("      if (msgs.length && (oldestSeq == null || msgs[0].seq < oldestSeq)) oldestSeq = msgs[0].seq;");
+  js.push("    }");
   js.push("    msgOffset += msgs.length;");
-  js.push("    if (msgs.length && (oldestSeq == null || msgs[0].seq < oldestSeq)) oldestSeq = msgs[0].seq;");
   js.push("  } catch (e) {");
   js.push("    var more = $('msgMore'); if (more) more.remove();");
   js.push(`    if (msgOffset === 0) { box.innerHTML = '<div class="loading" id="msgErr">\u52A0\u8F7D\u5931\u8D25\uFF1A' + esc(e.message) + '<br><button class="detail" id="retryBtn">\u91CD\u8BD5</button></div>'; var rb = $('retryBtn'); if (rb) rb.addEventListener('click', function(){ openDrawer(selectedKey); }); }`);
@@ -951,10 +978,11 @@ function buildJs() {
   js.push("function setupMsgScroll(){");
   js.push("  var box = $('messages');");
   js.push("  box.onscroll = function(){");
-  js.push("    if (!msgAllLoaded && !msgLoading && box.scrollTop < 80) { loadMoreMessages(); }");
+  js.push("    if (msgLoading || msgAllLoaded) return;");
+  js.push("    if (msgMode === 'asc') { if (box.scrollTop + box.clientHeight > box.scrollHeight - 80) { loadMoreMessages(); } }");
+  js.push("    else { if (box.scrollTop < 80) { loadMoreMessages(); } }");
   js.push("  };");
   js.push("}");
-  ;
   js.push("function closeDrawer(){");
   js.push("  $('layer').classList.remove('open');");
   js.push("  document.body.style.overflow = '';");
@@ -1022,6 +1050,7 @@ function buildJs() {
   js.push("}");
   js.push("async function doMsgSearch(){");
   js.push("  var q = $('msgSearch').value.trim().toLowerCase();");
+  js.push("  msgMode = 'desc'; msgAllLoaded = false; oldestSeq = null; newestSeq = null; msgOffset = 0; currentMessages = [];");
   js.push("  var count = $('searchCount'); var clear = $('searchClear');");
   js.push("  var box = $('messages');");
   js.push("  if (!q) {");
@@ -1074,7 +1103,6 @@ function buildJs() {
   js.push("  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeDrawer(); });");
   js.push("  $('fabCopy').addEventListener('click', exportConv);");
   js.push("  var jt = document.getElementById('jumpTop'); if (jt) jt.addEventListener('click', jumpToTop);");
-  js.push("  var jb = document.getElementById('jumpBottom'); if (jb) jb.addEventListener('click', jumpToBottom);");
   js.push("  updateAgentText();");
   js.push("  updateSourceText();");
   js.push("  loadAgents();");
@@ -1171,8 +1199,7 @@ function buildListHtml(state) {
   lines.push("    </header>");
   lines.push('    <div class="meta" id="meta"></div>');
   lines.push('    <div class="jump-nav" aria-label="\u6D88\u606F\u8DF3\u8F6C">');
-  lines.push('      <button class="jump-btn" id="jumpTop" aria-label="\u5230\u6700\u8001\u7684\u6D88\u606F">\u25B2</button>');
-  lines.push('      <button class="jump-btn" id="jumpBottom" aria-label="\u5230\u6700\u65B0\u7684\u6D88\u606F">\u25BC</button>');
+  lines.push('      <button class="jump-btn" id="jumpTop" aria-label="\u5230\u6700\u65E9\u7684\u6D88\u606F">\u25B2</button>');
   lines.push("    </div>");
   lines.push('    <div class="messages" id="messages"></div>');
   lines.push('    <button class="fab" id="fabCopy" aria-label="\u590D\u5236\u5168\u6587\u5230\u526A\u8D34\u677F">\u2197 \u590D\u5236\u5168\u6587</button>');
@@ -1378,8 +1405,7 @@ function buildDetailHtml(state) {
   else L.push(renderMessagesHtml(msgs));
   L.push("  </div></div></section>");
   L.push('  <div class="jump-nav" aria-label="\u6D88\u606F\u8DF3\u8F6C">');
-  L.push('    <a class="jump-btn" href="#msgTop" aria-label="\u5230\u6700\u8001\u7684\u6D88\u606F">\u25B2</a>');
-  L.push('    <a class="jump-btn" href="#msgBottom" aria-label="\u5230\u6700\u65B0\u7684\u6D88\u606F">\u25BC</a>');
+  L.push('    <a class="jump-btn" href="#msgTop" aria-label="\u5230\u6700\u65E9\u7684\u6D88\u606F">\u25B2</a>');
   L.push("  </div>");
   L.push("</main>");
   L.push("</body>");
@@ -1776,8 +1802,10 @@ function createAdminApiHandler(api) {
         }
         const beforeSeq = url.searchParams.get("beforeSeq")?.trim();
         const before = beforeSeq ? parseInt(beforeSeq, 10) : void 0;
+        const afterSeq = url.searchParams.get("afterSeq")?.trim();
+        const after = afterSeq ? parseInt(afterSeq, 10) : void 0;
         const search = url.searchParams.get("search")?.trim() || void 0;
-        const result = getMessages(db, key, limit, before, search);
+        const result = getMessages(db, key, limit, before, search, after);
         res.statusCode = 200;
         res.setHeader("content-type", "application/json; charset=utf-8");
         res.end(JSON.stringify({
