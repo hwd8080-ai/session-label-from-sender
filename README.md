@@ -36,6 +36,16 @@ OpenClaw 原生的「会话」是围绕 `sessionId` 组织的，日常使用与�
 - **全文复制**：一键把整段对话复制到剪贴板（受插件 iframe 沙盒限制，下载降级为复制，详见「已知平台限制」）。
 - **`/new` 会话旋转自愈**：执行 `/new` 后，新消息能自动同步进来并归并到同一发送者记录，不会卡在旧历史。
 
+## 效果预览
+
+### 会话列表
+
+![会话列表](assets/session-list.png)
+
+### 对话详情
+
+![对话详情](assets/session-detail.png)
+
 ---
 
 ## 安装
@@ -138,7 +148,7 @@ openclaw daemon restart
 
 - GitHub：<https://github.com/hwd8080-ai/session-label-from-sender>
 - ClawHub：`@hwd8080-ai/session-label-from-sender`
-- 版本：`2026.8.10`（兼容 `pluginApi >= 2026.7.1`）
+- 版本：`2026.8.11`（兼容 `pluginApi >= 2026.7.1`）
 
 ---
 
