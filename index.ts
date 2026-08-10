@@ -209,22 +209,6 @@ function createAdminPageHandler(api: unknown) {
     const params = url.searchParams;
     const db = getDb();
 
-    // Manual sync (then redirect to a clean URL so a refresh stays stable)
-    if (params.get("sync") === "1") {
-      try {
-        syncSessionRegistry(api);
-        await syncAllSessions(db);
-      } catch {
-        // ignore sync errors
-      }
-      const clean = new URL(req.url ?? "/", "http://127.0.0.1");
-      clean.searchParams.delete("sync");
-      res.statusCode = 302;
-      res.setHeader("location", clean.pathname + clean.search);
-      res.end();
-      return true;
-    }
-
     // Conversation detail (server-rendered; works without client JavaScript)
     const sessionKey = params.get("session");
     if (sessionKey) {
@@ -575,25 +559,6 @@ function createAdminApiHandler(api: unknown) {
         res.statusCode = 500;
         res.setHeader("content-type", "text/plain; charset=utf-8");
         res.end("Export failed: " + message + "\n");
-      }
-      return true;
-    }
-
-    // Manual sync trigger
-    if (pathname === "/plugins/session-admin/api/sync" && req.method === "GET") {
-      try {
-        const db = getDb();
-        // First sync session metadata from runtime
-        syncSessionRegistry(api);
-        // Then sync transcripts
-        const result = await syncAllSessions(db);
-        res.statusCode = 200;
-        res.setHeader("content-type", "application/json; charset=utf-8");
-        res.end(JSON.stringify(result));
-      } catch (err) {
-        res.statusCode = 500;
-        res.setHeader("content-type", "application/json; charset=utf-8");
-        res.end(JSON.stringify({ error: String(err) }));
       }
       return true;
     }

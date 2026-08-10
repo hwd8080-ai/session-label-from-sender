@@ -982,27 +982,6 @@ function buildJs() {
   js.push("  $('agentMenu').classList.remove('open');");
   js.push("  $('sourceMenu').classList.remove('open');");
   js.push("}");
-  js.push("async function doSync(){");
-  js.push("  var dot = $('syncDot');");
-  js.push("  var st = $('syncStatus');");
-  js.push("  var tm = $('syncTime');");
-  js.push("  dot.className = 'sync-dot sync-dot--syncing';");
-  js.push("  st.textContent = '\u540C\u6B65\u4E2D\u2026';");
-  js.push("  try {");
-  js.push("    var res = await fetch(API + '/sync');");
-  js.push("    var data = await res.json();");
-  js.push("    st.textContent = '\u540C\u6B65\u5B8C\u6210\uFF1A' + (data.sessionsSynced || 0) + ' \u4E2A\u4F1A\u8BDD\uFF0C' + (data.totalNewMessages || 0) + ' \u6761\u65B0\u6D88\u606F';");
-  js.push("    tm.textContent = new Date().toLocaleTimeString('zh-CN');");
-  js.push("    loadSessions();");
-  js.push("    loadAgents();");
-  js.push("    loadSources();");
-  js.push("  } catch(e) {");
-  js.push("    st.textContent = '\u540C\u6B65\u5931\u8D25\uFF1A' + e.message;");
-  js.push("  } finally {");
-  js.push("    dot.className = 'sync-dot';");
-  js.push("    setTimeout(function(){ if (st.textContent.indexOf('\u540C\u6B65\u5B8C\u6210') === 0 || st.textContent.indexOf('\u5931\u8D25') >= 0) st.textContent = '\u5C31\u7EEA'; }, 5000);");
-  js.push("  }");
-  js.push("}");
   js.push("function highlightMatches(container, query){");
   js.push("  var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);");
   js.push("  var nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);");
@@ -1072,7 +1051,6 @@ function buildJs() {
   js.push("  $('backdrop').addEventListener('click', closeDrawer);");
   js.push("  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeDrawer(); });");
   js.push("  $('fabCopy').addEventListener('click', exportConv);");
-  js.push("  $('syncBtn').addEventListener('click', doSync);");
   js.push("  updateAgentText();");
   js.push("  updateSourceText();");
   js.push("  loadAgents();");
@@ -1103,7 +1081,7 @@ function buildListHtml(state) {
   lines.push("<body>");
   lines.push('<main class="app">');
   lines.push('  <header class="top">');
-  lines.push('    <div class="head-row"><div class="head-main"><h1>\u4F1A\u8BDD\u8BB0\u5F55</h1><p class="desc">\u67E5\u627E\u5E76\u56DE\u6EAF Agent \u4E0E\u7528\u6237\u7684\u5386\u53F2\u5BF9\u8BDD</p></div><div class="head-right"><button class="btn sync-btn" id="syncBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3.6-7.2"/><polyline points="21 4 21 10 15 10"/></svg><span>\u540C\u6B65\u6570\u636E</span></button><p class="head-status"><span class="sync-dot" id="syncDot"></span><span id="syncStatus" class="sync-status">\u5C31\u7EEA</span><span class="sync-time" id="syncTime"></span></p></div></div>');
+  lines.push('    <div class="head-row"><div class="head-main"><h1>\u4F1A\u8BDD\u8BB0\u5F55</h1><p class="desc">\u67E5\u627E\u5E76\u56DE\u6EAF Agent \u4E0E\u7528\u6237\u7684\u5386\u53F2\u5BF9\u8BDD</p></div></div>');
   lines.push("  </header>");
   lines.push('  <section class="card filters">');
   lines.push('    <div id="filters">');
@@ -1319,7 +1297,7 @@ function ssrControlsHtml(state) {
   const pageSize = state.pageSize || 10;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pager = '<a class="ssr-page' + (page <= 1 ? " disabled" : "") + '" href="' + escHtml(buildHref({ page: page - 1 })) + '">\u2039 \u4E0A\u4E00\u9875</a><span class="ssr-pginfo">\u7B2C ' + page + "/" + totalPages + " \u9875 \xB7 \u5171 " + total + ' \u6761</span><a class="ssr-page' + (page >= totalPages ? " disabled" : "") + '" href="' + escHtml(buildHref({ page: page + 1 })) + '">\u4E0B\u4E00\u9875 \u203A</a>';
-  return '<div id="ssrControls" class="ssr-controls"><div class="ssr-row"><span class="ssr-label">Agent\uFF1A</span><a class="ssr-chip' + (f.agentId ? "" : " active") + '" href="' + escHtml(buildHref({ agent: "" })) + '">\u5168\u90E8</a>' + agentChips + '</div><div class="ssr-row"><span class="ssr-label">\u6765\u6E90\uFF1A</span><a class="ssr-chip' + (f.channel ? "" : " active") + '" href="' + escHtml(buildHref({ channel: "" })) + '">\u5168\u90E8</a>' + chanChips + '</div><div class="ssr-row"><span class="ssr-label">\u5206\u9875\uFF1A</span>' + pager + '<a class="ssr-sync" href="?sync=1">\u27F3 \u540C\u6B65\u6570\u636E</a></div><div class="ssr-note">\u7CBE\u7B80\u6D4F\u89C8\u6A21\u5F0F\uFF1A\u5F53\u524D\u4E3A\u6C99\u76D2\u7981\u7528\u811A\u672C\u72B6\u6001\uFF0C\u5217\u8868 / \u7FFB\u9875 / \u7B5B\u9009 / \u8FDB\u5165\u8BE6\u60C5 / \u540C\u6B65 / \u5BFC\u51FA\u5747\u53EF\u6B63\u5E38\u4F7F\u7528\uFF1B\u5207\u6362\u83DC\u5355\u540E\u91CD\u8F7D\u5373\u53EF\u542F\u7528\u641C\u7D22\u4E0E\u6D88\u606F\u5185\u67E5\u627E\u3002</div></div>';
+  return '<div id="ssrControls" class="ssr-controls"><div class="ssr-row"><span class="ssr-label">Agent\uFF1A</span><a class="ssr-chip' + (f.agentId ? "" : " active") + '" href="' + escHtml(buildHref({ agent: "" })) + '">\u5168\u90E8</a>' + agentChips + '</div><div class="ssr-row"><span class="ssr-label">\u6765\u6E90\uFF1A</span><a class="ssr-chip' + (f.channel ? "" : " active") + '" href="' + escHtml(buildHref({ channel: "" })) + '">\u5168\u90E8</a>' + chanChips + '</div><div class="ssr-row"><span class="ssr-label">\u5206\u9875\uFF1A</span>' + pager + '</div><div class="ssr-note">\u7CBE\u7B80\u6D4F\u89C8\u6A21\u5F0F\uFF1A\u5F53\u524D\u4E3A\u6C99\u76D2\u7981\u7528\u811A\u672C\u72B6\u6001\uFF0C\u5217\u8868 / \u7FFB\u9875 / \u7B5B\u9009 / \u8FDB\u5165\u8BE6\u60C5 / \u5BFC\u51FA\u5747\u53EF\u6B63\u5E38\u4F7F\u7528\uFF08\u6570\u636E\u5728\u6253\u5F00\u5217\u8868\u6216\u4F1A\u8BDD\u65F6\u81EA\u52A8\u5237\u65B0\uFF09\uFF1B\u5207\u6362\u83DC\u5355\u540E\u91CD\u8F7D\u5373\u53EF\u542F\u7528\u641C\u7D22\u4E0E\u6D88\u606F\u5185\u67E5\u627E\u3002</div></div>';
 }
 function buildDetailHtml(state) {
   const s = state.session;
@@ -1548,19 +1526,6 @@ function createAdminPageHandler(api) {
     }
     const params = url.searchParams;
     const db = getDb();
-    if (params.get("sync") === "1") {
-      try {
-        syncSessionRegistry(api);
-        await syncAllSessions(db);
-      } catch {
-      }
-      const clean = new URL(req.url ?? "/", "http://127.0.0.1");
-      clean.searchParams.delete("sync");
-      res.statusCode = 302;
-      res.setHeader("location", clean.pathname + clean.search);
-      res.end();
-      return true;
-    }
     const sessionKey = params.get("session");
     if (sessionKey) {
       const session = getSession(db, sessionKey);
@@ -1872,21 +1837,6 @@ function createAdminApiHandler(api) {
         res.statusCode = 500;
         res.setHeader("content-type", "text/plain; charset=utf-8");
         res.end("Export failed: " + message + "\n");
-      }
-      return true;
-    }
-    if (pathname === "/plugins/session-admin/api/sync" && req.method === "GET") {
-      try {
-        const db = getDb();
-        syncSessionRegistry(api);
-        const result = await syncAllSessions(db);
-        res.statusCode = 200;
-        res.setHeader("content-type", "application/json; charset=utf-8");
-        res.end(JSON.stringify(result));
-      } catch (err) {
-        res.statusCode = 500;
-        res.setHeader("content-type", "application/json; charset=utf-8");
-        res.end(JSON.stringify({ error: String(err) }));
       }
       return true;
     }

@@ -98,7 +98,7 @@ openclaw daemon restart
 
 - 会话列表、消息、筛选、分页、搜索 **全部查询这份 SQLite**，前端不直接读取 JSONL 文件。
 - 数据源是 OpenClaw 原生 JSONL 转录：`<stateDir>/agents/<agentId>/sessions/<sessionId>.jsonl`，仅在「同步」时按字节偏移增量解析写入。
-- 同步触发：页面「同步数据」按钮（`/api/sync`）+ daemon 内定时同步。
+- 同步触发（无手动按钮，全自动）：① 每次请求会话列表（`/api/sessions`）时服务端先做轻量 registry 同步，新会话行近实时出现；② 打开会话详情（`/api/messages`）时服务端增量同步该会话的消息内容；③ daemon 内定时（默认 5 分钟）全量同步所有会话内容兜底。
 
 ---
 
@@ -112,7 +112,7 @@ openclaw daemon restart
 2. **首屏 strict 沙盒竞态（未根治：根因在 OpenClaw 主程序 + 插件降级兜底）**
    **根因不在插件，在 OpenClaw 主程序**：`ui/src/pages/plugin/plugin-page.ts` 用 `@consume({context:applicationContext, subscribe:false})` 读取沙盒配置。首屏应用上下文（含 `gateway.controlUi.embedSandbox` 是否放行脚本）往往尚未加载完，于是 iframe 以默认的 `strict` 沙盒（禁脚本）建立；又因 `subscribe:false` 不订阅后续更新，**已建好的严格沙盒不会追溯放开脚本**。表现即：硬刷新插件页一次会报 `Blocked script execution ... allow-scripts not set`，页面脚本不执行（关键字搜索 / 消息内查找 / 复制全文等交互失效），切走再切回才正常。
    **当前状态：未解决**。该问题只能改 OpenClaw 主仓库（`subscribe:false` 改为订阅，或等配置就绪再渲染 iframe）才能根除，插件作为扩展无法绕过。
-   **插件侧的降级兜底（注意：非根治）**：鉴于首屏可能落在严格沙盒里，插件用**服务端渲染（SSR）**保证"静态可用"——数据直接渲染进 HTML，翻页 / 筛选 / 进入详情用 `<a>` 链接，同步用 `?sync=1`（服务端 302 回干净 URL）。这样即便脚本被禁，列表 / 筛选 / 详情 / 同步仍可通过纯链接完成；但**交互增强在脚本恢复前不可用，且硬刷新报错本身不会因 SSR 而消失**。
+   **插件侧的降级兜底（注意：非根治）**：鉴于首屏可能落在严格沙盒里，插件用**服务端渲染（SSR）**保证"静态可用"——数据直接渲染进 HTML，翻页 / 筛选 / 进入详情用 `<a>` 链接；列表与详情在打开时由服务端自动触发对应同步，无需手动按钮。这样即便脚本被禁，列表 / 筛选 / 详情 / 导出仍可通过纯链接完成；但**交互增强在脚本恢复前不可用，且硬刷新报错本身不会因 SSR 而消失**。
    **临时规避（不稳定）**：报错后切到别的菜单再切回插件 Tab，或进 Tab 前先逛一下首页让配置加载完，通常可让脚本沙盒生效；仍偶发，非稳定方案。
 
 ---
@@ -138,7 +138,7 @@ openclaw daemon restart
 
 - GitHub：<https://github.com/hwd8080-ai/session-label-from-sender>
 - ClawHub：`@hwd8080-ai/session-label-from-sender`
-- 版本：`2026.8.9`（兼容 `pluginApi >= 2026.7.1`）
+- 版本：`2026.8.10`（兼容 `pluginApi >= 2026.7.1`）
 
 ---
 

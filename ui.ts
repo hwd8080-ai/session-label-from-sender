@@ -310,27 +310,6 @@ function buildJs() {
   js.push("  $('agentMenu').classList.remove('open');");
   js.push("  $('sourceMenu').classList.remove('open');");
   js.push("}");
-  js.push("async function doSync(){");
-  js.push("  var dot = $('syncDot');");
-  js.push("  var st = $('syncStatus');");
-  js.push("  var tm = $('syncTime');");
-  js.push("  dot.className = 'sync-dot sync-dot--syncing';");
-  js.push("  st.textContent = '同步中…';");
-  js.push("  try {");
-  js.push("    var res = await fetch(API + '/sync');");
-  js.push("    var data = await res.json();");
-  js.push("    st.textContent = '同步完成：' + (data.sessionsSynced || 0) + ' 个会话，' + (data.totalNewMessages || 0) + ' 条新消息';");
-  js.push("    tm.textContent = new Date().toLocaleTimeString('zh-CN');");
-  js.push("    loadSessions();");
-  js.push("    loadAgents();");
-  js.push("    loadSources();");
-  js.push("  } catch(e) {");
-  js.push("    st.textContent = '同步失败：' + e.message;");
-  js.push("  } finally {");
-  js.push("    dot.className = 'sync-dot';");
-  js.push("    setTimeout(function(){ if (st.textContent.indexOf('同步完成') === 0 || st.textContent.indexOf('失败') >= 0) st.textContent = '就绪'; }, 5000);");
-  js.push("  }");
-  js.push("}");
   js.push("function highlightMatches(container, query){");
   js.push("  var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);");
   js.push("  var nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);");
@@ -402,7 +381,6 @@ function buildJs() {
   js.push("  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeDrawer(); });");
 
   js.push("  $('fabCopy').addEventListener('click', exportConv);");
-  js.push("  $('syncBtn').addEventListener('click', doSync);");
   js.push("  updateAgentText();");
   js.push("  updateSourceText();");
   js.push("  loadAgents();");
@@ -432,7 +410,7 @@ function buildListHtml(state) {
   lines.push("<body>");
   lines.push("<main class=\"app\">");
   lines.push("  <header class=\"top\">");
-  lines.push("    <div class=\"head-row\"><div class=\"head-main\"><h1>会话记录</h1><p class=\"desc\">查找并回溯 Agent 与用户的历史对话</p></div><div class=\"head-right\"><button class=\"btn sync-btn\" id=\"syncBtn\" type=\"button\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 12a9 9 0 1 1-3.6-7.2\"/><polyline points=\"21 4 21 10 15 10\"/></svg><span>同步数据</span></button><p class=\"head-status\"><span class=\"sync-dot\" id=\"syncDot\"></span><span id=\"syncStatus\" class=\"sync-status\">就绪</span><span class=\"sync-time\" id=\"syncTime\"></span></p></div></div>");
+  lines.push("    <div class=\"head-row\"><div class=\"head-main\"><h1>会话记录</h1><p class=\"desc\">查找并回溯 Agent 与用户的历史对话</p></div></div>");
   lines.push("  </header>");
   lines.push("  <section class=\"card filters\">");
   lines.push("    <div id=\"filters\">");
@@ -635,8 +613,8 @@ function ssrControlsHtml(state) {
   return '<div id="ssrControls" class="ssr-controls">' +
     '<div class="ssr-row"><span class="ssr-label">Agent：</span><a class="ssr-chip' + (f.agentId ? "" : " active") + '" href="' + escHtml(buildHref({ agent: "" })) + '">全部</a>' + agentChips + "</div>" +
     '<div class="ssr-row"><span class="ssr-label">来源：</span><a class="ssr-chip' + (f.channel ? "" : " active") + '" href="' + escHtml(buildHref({ channel: "" })) + '">全部</a>' + chanChips + "</div>" +
-    '<div class="ssr-row"><span class="ssr-label">分页：</span>' + pager + '<a class="ssr-sync" href="?sync=1">⟳ 同步数据</a></div>' +
-    '<div class="ssr-note">精简浏览模式：当前为沙盒禁用脚本状态，列表 / 翻页 / 筛选 / 进入详情 / 同步 / 导出均可正常使用；切换菜单后重载即可启用搜索与消息内查找。</div>' +
+    '<div class="ssr-row"><span class="ssr-label">分页：</span>' + pager + '</div>' +
+    '<div class="ssr-note">精简浏览模式：当前为沙盒禁用脚本状态，列表 / 翻页 / 筛选 / 进入详情 / 导出均可正常使用（数据在打开列表或会话时自动刷新）；切换菜单后重载即可启用搜索与消息内查找。</div>' +
     "</div>";
 }
 function buildDetailHtml(state) {
