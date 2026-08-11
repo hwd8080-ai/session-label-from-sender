@@ -272,7 +272,6 @@ function buildJs() {
   js.push("}");
   js.push("function updatePager(){");
   js.push("  var totalPages = Math.max(1, Math.ceil(totalCount / pageSize));");
-  js.push("  $('count').textContent = totalCount;");
   js.push("  $('pageInfo').textContent = '共 ' + totalCount + ' 条 · 第 ' + currentPage + '/' + totalPages + ' 页';");
   js.push("  $('prevBtn').disabled = currentPage <= 1;");
   js.push("  $('nextBtn').disabled = currentPage >= totalPages;");
@@ -541,7 +540,7 @@ function buildListHtml(state) {
   lines.push("      </div>");
   lines.push("      <div class=\"field date-field\">");
   lines.push("        <label>日期范围</label>");
-  lines.push("        <div class=\"range\"><input id=\"startDate\" class=\"control\" type=\"date\" aria-label=\"开始日期\"><span>至</span><input id=\"endDate\" class=\"control\" type=\"date\" aria-label=\"结束日期\"></div>");
+  lines.push("        <div class=\"range\"><input id=\"startDate\" class=\"control\" type=\"date\" aria-label=\"开始日期\" onclick=\"try{this.showPicker()}catch(e){}\"><span>至</span><input id=\"endDate\" class=\"control\" type=\"date\" aria-label=\"结束日期\" onclick=\"try{this.showPicker()}catch(e){}\"></div>");
   lines.push("      </div>");
   lines.push("      <div class=\"buttons\">");
   lines.push("        <button class=\"btn primary\" type=\"button\" id=\"searchBtn\">⌕ 搜索</button>");
@@ -551,9 +550,6 @@ function buildListHtml(state) {
   lines.push("  </section>");
   lines.push(ssrControlsHtml(state));
   lines.push("  <section class=\"card list-card\">");
-  lines.push("    <div class=\"heading\">");
-  lines.push("      <div><h2>查询列表</h2><p>共 <strong id=\"count\">0</strong> 条会话记录</p></div>");
-  lines.push("    </div>");
   lines.push("    <div class=\"tablebox\">");
   lines.push("      <table>");
   lines.push("        <thead><tr><th>Agent 名称</th><th>姓名</th><th>会话标题</th><th>对话时间</th><th>对话分类</th><th>数据来源</th><th>操作</th></tr></thead>");

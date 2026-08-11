@@ -6252,7 +6252,6 @@ function buildJs() {
   js.push("}");
   js.push("function updatePager(){");
   js.push("  var totalPages = Math.max(1, Math.ceil(totalCount / pageSize));");
-  js.push("  $('count').textContent = totalCount;");
   js.push("  $('pageInfo').textContent = '\u5171 ' + totalCount + ' \u6761 \xB7 \u7B2C ' + currentPage + '/' + totalPages + ' \u9875';");
   js.push("  $('prevBtn').disabled = currentPage <= 1;");
   js.push("  $('nextBtn').disabled = currentPage >= totalPages;");
@@ -6519,7 +6518,7 @@ function buildListHtml(state) {
   lines.push("      </div>");
   lines.push('      <div class="field date-field">');
   lines.push("        <label>\u65E5\u671F\u8303\u56F4</label>");
-  lines.push('        <div class="range"><input id="startDate" class="control" type="date" aria-label="\u5F00\u59CB\u65E5\u671F"><span>\u81F3</span><input id="endDate" class="control" type="date" aria-label="\u7ED3\u675F\u65E5\u671F"></div>');
+  lines.push('        <div class="range"><input id="startDate" class="control" type="date" aria-label="\u5F00\u59CB\u65E5\u671F" onclick="try{this.showPicker()}catch(e){}"><span>\u81F3</span><input id="endDate" class="control" type="date" aria-label="\u7ED3\u675F\u65E5\u671F" onclick="try{this.showPicker()}catch(e){}"></div>');
   lines.push("      </div>");
   lines.push('      <div class="buttons">');
   lines.push('        <button class="btn primary" type="button" id="searchBtn">\u2315 \u641C\u7D22</button>');
@@ -6529,9 +6528,6 @@ function buildListHtml(state) {
   lines.push("  </section>");
   lines.push(ssrControlsHtml(state));
   lines.push('  <section class="card list-card">');
-  lines.push('    <div class="heading">');
-  lines.push('      <div><h2>\u67E5\u8BE2\u5217\u8868</h2><p>\u5171 <strong id="count">0</strong> \u6761\u4F1A\u8BDD\u8BB0\u5F55</p></div>');
-  lines.push("    </div>");
   lines.push('    <div class="tablebox">');
   lines.push("      <table>");
   lines.push("        <thead><tr><th>Agent \u540D\u79F0</th><th>\u59D3\u540D</th><th>\u4F1A\u8BDD\u6807\u9898</th><th>\u5BF9\u8BDD\u65F6\u95F4</th><th>\u5BF9\u8BDD\u5206\u7C7B</th><th>\u6570\u636E\u6765\u6E90</th><th>\u64CD\u4F5C</th></tr></thead>");
