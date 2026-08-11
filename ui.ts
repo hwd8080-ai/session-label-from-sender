@@ -248,7 +248,7 @@ function buildJs() {
   js.push("  if (sourceSel.length) params.set('channel', sourceSel.join(','));");
   js.push("  var start = $('startDate').value;");
   js.push("  var end = $('endDate').value;");
-  js.push("  if (start && end && start > end) { alert('开始日期不能晚于结束日期'); btn.disabled = false; btn.textContent = '搜索'; return; }");
+  js.push("  if (start && end && start > end) { $('errorBox').textContent = '开始日期不能晚于结束日期'; $('errorBox').style.display = 'block'; btn.disabled = false; btn.textContent = '搜索'; return; }");
   js.push("  if (start) params.set('dateFrom', start);");
   js.push("  if (end) params.set('dateTo', end);");
   js.push("  params.set('sortBy', 'updated_at');");

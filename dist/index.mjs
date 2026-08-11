@@ -6228,7 +6228,7 @@ function buildJs() {
   js.push("  if (sourceSel.length) params.set('channel', sourceSel.join(','));");
   js.push("  var start = $('startDate').value;");
   js.push("  var end = $('endDate').value;");
-  js.push("  if (start && end && start > end) { alert('\u5F00\u59CB\u65E5\u671F\u4E0D\u80FD\u665A\u4E8E\u7ED3\u675F\u65E5\u671F'); btn.disabled = false; btn.textContent = '\u641C\u7D22'; return; }");
+  js.push("  if (start && end && start > end) { $('errorBox').textContent = '\u5F00\u59CB\u65E5\u671F\u4E0D\u80FD\u665A\u4E8E\u7ED3\u675F\u65E5\u671F'; $('errorBox').style.display = 'block'; btn.disabled = false; btn.textContent = '\u641C\u7D22'; return; }");
   js.push("  if (start) params.set('dateFrom', start);");
   js.push("  if (end) params.set('dateTo', end);");
   js.push("  params.set('sortBy', 'updated_at');");
