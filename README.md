@@ -164,7 +164,7 @@ openclaw daemon restart
 
 - GitHub：<https://github.com/hwd8080-ai/session-label-from-sender>
 - ClawHub：`@hwd8080-ai/session-label-from-sender`
-- 版本：`2026.8.11`（兼容 `pluginApi >= 2026.7.1`）
+- 版本：`2026.8.12`（兼容 `pluginApi >= 2026.7.1`）
 
 ---
 
