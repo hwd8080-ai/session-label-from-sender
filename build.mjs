@@ -39,6 +39,8 @@ const shared = {
   target: "node22",
   // Keep host/runtime imports external; only our own .ts modules are inlined.
   external: ["node:*", "openclaw", "openclaw/*"],
+  // Resolve npm deps (e.g. markdown-it) from the managed node workspace.
+  nodePaths: [path.resolve(process.env.HOME, ".workbuddy/binaries/node/workspace/node_modules")],
   logLevel: "warning",
 };
 
@@ -70,4 +72,20 @@ for (const orphan of ["db.mjs", "sync.mjs", "ui.mjs", "index.mjs"]) {
   if (fs.existsSync(p)) fs.rmSync(p);
 }
 
-console.log("Built self-contained index.mjs (root + dist/index.mjs)");
+// 4) Browser IIFE bundle of markdown-it, exposed as globalThis.MD, used by the
+//    client-side drawer renderer (buildJs's md()). Inlined into the page by
+//    ui.ts so the browser has a real markdown engine without a separate request.
+const mdClient = path.join(distDir, "md-client.js");
+await build({
+  entryPoints: [path.join(__dirname, "mdClientEntry.ts")],
+  bundle: true,
+  format: "iife",
+  platform: "browser",
+  target: "es2020",
+  nodePaths: shared.nodePaths,
+  logLevel: "warning",
+  outfile: mdClient,
+});
+fs.copyFileSync(mdClient, path.join(__dirname, "md-client.js"));
+
+console.log("Built self-contained index.mjs (root + dist/index.mjs) + md-client.js");
