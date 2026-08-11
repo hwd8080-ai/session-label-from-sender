@@ -525,7 +525,7 @@ function updateSyncCursor(db, sessionKey, cursor) {
     `UPDATE sessions SET sync_cursor = ${cursor}, synced_at = ${Date.now()} WHERE session_key = '${sessionKey}'`
   );
 }
-function getMessages(db, sessionKey, limit = 200, beforeSeq, search, afterSeq) {
+function getMessages(db, sessionKey, limit = 200, beforeSeq, search, afterSeq, startTs, endTs) {
   const whereParts = ["session_key = ?"];
   const params = [sessionKey];
   if (beforeSeq !== void 0) {
@@ -539,6 +539,14 @@ function getMessages(db, sessionKey, limit = 200, beforeSeq, search, afterSeq) {
   if (search) {
     whereParts.push("content_json LIKE ?");
     params.push(`%${search}%`);
+  }
+  if (startTs !== void 0) {
+    whereParts.push("timestamp >= ?");
+    params.push(startTs);
+  }
+  if (endTs !== void 0) {
+    whereParts.push("timestamp <= ?");
+    params.push(endTs);
   }
   const where = whereParts.join(" AND ");
   const countStmt = db.prepare(`SELECT COUNT(*) as cnt FROM messages WHERE ${where}`);
@@ -6027,7 +6035,7 @@ var CSS = `:root{--ink:#252421;--muted:#78746d;--line:#e8e3da;--paper:#fffefa;--
 
 
 
-.jump-nav{position:fixed;right:16px;bottom:68px;z-index:20;display:flex;pointer-events:none}
+.drawer-dates{display:flex;align-items:center;gap:10px;padding:8px 18px;border-bottom:1px solid var(--line);background:var(--paper);flex-wrap:wrap}.drawer-dates .date-info{color:var(--muted);font-size:12px}.drawer-dates input[type=date]{width:140px}.jump-nav{position:fixed;right:16px;bottom:68px;z-index:20;display:flex;pointer-events:none}
 .jump-btn{pointer-events:auto;display:inline-flex;align-items:center;gap:4px;height:40px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.95);color:var(--ink);font-size:13px;font-weight:600;line-height:1;white-space:nowrap;cursor:pointer;box-shadow:0 4px 14px rgba(40,36,30,.14);transition:background .15s,color .15s,transform .1s}
 .jump-btn:hover{background:var(--teal);color:#fff;border-color:var(--teal);transform:translateY(-1px)}
 .jump-btn:active{transform:translateY(0)}
@@ -6262,6 +6270,7 @@ function buildJs() {
   js.push("    $('meta').innerHTML = '<div><span>Agent</span><strong>' + esc(agentLabel(currentSession.agent_id)) + '</strong></div>' + '<div><span>\u7528\u6237</span><strong>' + esc(currentSession.sender_name || currentSession.label || '-') + '</strong></div>' + '<div><span>\u6765\u6E90</span><strong>' + esc(sourceLabel(currentSession.channel)) + '</strong></div>' + '<div><span>\u5206\u7C7B</span><strong>' + esc(catLabel(currentSession)) + '</strong></div>';");
   js.push("  }");
   js.push("  msgOffset = 0; msgAllLoaded = false; oldestSeq = null; newestSeq = null; msgMode = 'desc'; msgHighlight = null; currentMessages = []; topDate = null; bottomDate = null;");
+  js.push("  var ds = $('dStart'), de = $('dEnd'); if (ds) ds.value = ''; if (de) de.value = ''; var dclr = $('dateClear'); if (dclr) dclr.style.display = 'none'; var dinfo = $('dateInfo'); if (dinfo) dinfo.textContent = '';");
   js.push("  $('messages').innerHTML = '';");
   js.push("  await loadMoreMessages();");
   js.push("  setupMsgScroll();");
@@ -6276,6 +6285,9 @@ function buildJs() {
   js.push("    var params = new URLSearchParams();");
   js.push("    params.set('key', selectedKey);");
   js.push("    params.set('limit', '30');");
+  js.push("    var sd = $('dStart').value, ed = $('dEnd').value;");
+  js.push("    if (sd) params.set('dateFrom', sd);");
+  js.push("    if (ed) params.set('dateTo', ed);");
   js.push("    if (msgMode === 'asc') { params.set('afterSeq', String(newestSeq == null ? 0 : newestSeq)); }");
   js.push("    else { if (oldestSeq != null) params.set('beforeSeq', String(oldestSeq)); }");
   js.push("    params.set('offset', String(msgOffset));");
@@ -6422,6 +6434,9 @@ function buildJs() {
   js.push("    var params = new URLSearchParams();");
   js.push("    params.set('key', selectedKey);");
   js.push("    params.set('search', q);");
+  js.push("    var sd = $('dStart').value, ed = $('dEnd').value;");
+  js.push("    if (sd) params.set('dateFrom', sd);");
+  js.push("    if (ed) params.set('dateTo', ed);");
   js.push("    params.set('limit', '200');");
   js.push("    var res = await fetch(API + '/messages?' + params.toString());");
   js.push("    if (!res.ok) throw new Error('HTTP ' + res.status);");
@@ -6436,6 +6451,17 @@ function buildJs() {
   js.push("}");
   js.push("function clearMsgSearch(){");
   js.push("  $('msgSearch').value = ''; doMsgSearch();");
+  js.push("}");
+  js.push("function applyDateFilter(){");
+  js.push("  var sd = $('dStart').value, ed = $('dEnd').value;");
+  js.push("  var dinfo = $('dateInfo'), dclr = $('dateClear');");
+  js.push("  if (sd && ed && sd > ed) { $('errorBox').textContent = '\u5F00\u59CB\u65E5\u671F\u4E0D\u80FD\u665A\u4E8E\u7ED3\u675F\u65E5\u671F'; $('errorBox').style.display = 'block'; return; }");
+  js.push("  $('errorBox').style.display = 'none';");
+  js.push("  dclr.style.display = (sd || ed) ? 'inline-block' : 'none';");
+  js.push("  dinfo.textContent = (sd || ed) ? ('\u7B5B\u9009\uFF1A' + (sd || '\u2026') + ' \u81F3 ' + (ed || '\u2026')) : '';");
+  js.push("  msgMode = 'desc'; msgAllLoaded = false; oldestSeq = null; newestSeq = null; msgOffset = 0; currentMessages = []; topDate = null; bottomDate = null;");
+  js.push("  var box = $('messages'); box.innerHTML = '';");
+  js.push("  loadMoreMessages().then(function(){ box.scrollTop = box.scrollHeight - box.clientHeight; });");
   js.push("}");
   js.push("document.addEventListener('DOMContentLoaded', function(){");
   js.push("  var _ssr = document.getElementById('ssrControls'); if (_ssr) _ssr.style.display = 'none';");
@@ -6460,6 +6486,9 @@ function buildJs() {
   js.push("  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeDrawer(); });");
   js.push("  $('fabCopy').addEventListener('click', exportConv);");
   js.push("  var jt = document.getElementById('jumpTop'); if (jt) jt.addEventListener('click', jumpToTop);");
+  js.push("  var ds = document.getElementById('dStart'); if (ds) ds.addEventListener('change', applyDateFilter);");
+  js.push("  var de = document.getElementById('dEnd'); if (de) de.addEventListener('change', applyDateFilter);");
+  js.push("  var dclr = document.getElementById('dateClear'); if (dclr) dclr.addEventListener('click', function(){ var a = document.getElementById('dStart'), b = document.getElementById('dEnd'); if (a) a.value = ''; if (b) b.value = ''; applyDateFilter(); });");
   js.push("  updateAgentText();");
   js.push("  updateSourceText();");
   js.push("  loadAgents();");
@@ -6555,6 +6584,7 @@ function buildListHtml(state) {
   lines.push('      <button class="close" id="closeBtn" aria-label="\u5173\u95ED">\xD7</button>');
   lines.push("    </header>");
   lines.push('    <div class="meta" id="meta"></div>');
+  lines.push('    <div class="drawer-dates"><div class="range"><input id="dStart" class="control" type="date" aria-label="\u5F00\u59CB\u65E5\u671F"><span>\u81F3</span><input id="dEnd" class="control" type="date" aria-label="\u7ED3\u675F\u65E5\u671F"></div><span class="date-info" id="dateInfo"></span><button class="search-clear" id="dateClear" style="display:none">\u6E05\u9664\u65E5\u671F</button></div>');
   lines.push('    <div class="jump-nav" aria-label="\u6D88\u606F\u8DF3\u8F6C">');
   lines.push('      <button class="jump-btn" id="jumpTop" aria-label="\u5230\u6700\u65E9\u7684\u6D88\u606F">\u25B2 \u9876\u90E8</button>');
   lines.push("    </div>");
@@ -7160,7 +7190,11 @@ function createAdminApiHandler(api) {
         const afterSeq = url.searchParams.get("afterSeq")?.trim();
         const after = afterSeq ? parseInt(afterSeq, 10) : void 0;
         const search = url.searchParams.get("search")?.trim() || void 0;
-        const result = getMessages(db, key, limit, before, search, after);
+        const dateFrom = url.searchParams.get("dateFrom")?.trim();
+        const dateTo = url.searchParams.get("dateTo")?.trim();
+        const startTs = dateFrom ? new Date(dateFrom).getTime() : void 0;
+        const endTs = dateTo ? new Date(dateTo).getTime() + 864e5 : void 0;
+        const result = getMessages(db, key, limit, before, search, after, startTs, endTs);
         res.statusCode = 200;
         res.setHeader("content-type", "application/json; charset=utf-8");
         res.end(JSON.stringify({

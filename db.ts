@@ -362,6 +362,8 @@ export function getMessages(
   beforeSeq?: number,
   search?: string,
   afterSeq?: number,
+  startTs?: number,
+  endTs?: number,
 ): { messages: MessageRow[]; total: number } {
   const whereParts: string[] = ["session_key = ?"];
   const params: (string | number)[] = [sessionKey];
@@ -377,6 +379,14 @@ export function getMessages(
   if (search) {
     whereParts.push("content_json LIKE ?");
     params.push(`%${search}%`);
+  }
+  if (startTs !== undefined) {
+    whereParts.push("timestamp >= ?");
+    params.push(startTs);
+  }
+  if (endTs !== undefined) {
+    whereParts.push("timestamp <= ?");
+    params.push(endTs);
   }
 
   const where = whereParts.join(" AND ");

@@ -461,7 +461,11 @@ function createAdminApiHandler(api: unknown) {
         const afterSeq = url.searchParams.get("afterSeq")?.trim();
         const after = afterSeq ? parseInt(afterSeq, 10) : undefined;
         const search = url.searchParams.get("search")?.trim() || undefined;
-        const result = getMessages(db, key, limit, before, search, after);
+        const dateFrom = url.searchParams.get("dateFrom")?.trim();
+        const dateTo = url.searchParams.get("dateTo")?.trim();
+        const startTs = dateFrom ? new Date(dateFrom).getTime() : undefined;
+        const endTs = dateTo ? new Date(dateTo).getTime() + 86400000 : undefined;
+        const result = getMessages(db, key, limit, before, search, after, startTs, endTs);
         res.statusCode = 200;
         res.setHeader("content-type", "application/json; charset=utf-8");
         res.end(JSON.stringify({
