@@ -31,7 +31,11 @@ Shows a full conversation on a timeline: user bubbles (right), assistant bubbles
 
 ### Option 1: Install from ClawHub (recommended)
 
-Search for and install `@hwd8080-ai/session-label-from-sender` in OpenClaw via ClawHub, then restart to activate.
+Run the following command in OpenClaw, then restart the Gateway when prompted:
+
+```bash
+openclaw plugins install clawhub:@hwd8080-ai/session-label-from-sender
+```
 
 ### Option 2: Build and deploy from source
 

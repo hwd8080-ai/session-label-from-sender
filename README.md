@@ -31,7 +31,11 @@ OpenClaw 原生「会话」围绕 `sessionId` 组织，日常有两个原生后�
 
 ### 方式一：从 ClawHub 安装（推荐）
 
-在 OpenClaw 中通过 ClawHub 搜索并安装 `@hwd8080-ai/session-label-from-sender`，安装后重启即可。
+在 OpenClaw 中执行以下命令安装，安装后按提示重启 Gateway 即可：
+
+```bash
+openclaw plugins install clawhub:@hwd8080-ai/session-label-from-sender
+```
 
 ### 方式二：从源码构建部署
 
