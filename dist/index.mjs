@@ -6336,6 +6336,40 @@ function buildJs() {
   js.push("  });");
   js.push("  return calls || res;");
   js.push("}");
+  js.push("function isToolCallOnly(m){");
+  js.push("  if (m.role !== 'assistant') return false;");
+  js.push("  var c = m.content_json; try { c = JSON.parse(c); if (typeof c === 'string') c = JSON.parse(c); } catch(e){ return false; }");
+  js.push("  if (!Array.isArray(c)) return false;");
+  js.push("  var hasText = c.some(function(b){ return (b && b.type === 'text' && (b.text||'').trim()) || (typeof b === 'string' && b.trim()); });");
+  js.push("  if (hasText) return false;");
+  js.push("  return c.some(function(b){ return b && (b.type === 'toolCall' || b.type === 'tool_use'); });");
+  js.push("}");
+  js.push("function firstToolName(m){");
+  js.push("  var c = m.content_json; try { c = JSON.parse(c); if (typeof c === 'string') c = JSON.parse(c); } catch(e){ return ''; }");
+  js.push("  if (!Array.isArray(c)) return '';");
+  js.push("  for (var i = 0; i < c.length; i++){ if (c[i] && (c[i].type === 'toolCall' || c[i].type === 'tool_use')) return c[i].name || ''; }");
+  js.push("  return '';");
+  js.push("}");
+  js.push("function coalesceToolActivity(msgs){");
+  js.push("  var out = []; var arr = msgs || [];");
+  js.push("  for (var i = 0; i < arr.length; i++){");
+  js.push("    var m = arr[i];");
+  js.push("    if (isToolCallOnly(m) && i + 1 < arr.length && (arr[i+1].role === 'tool' || arr[i+1].role === 'toolResult')){");
+  js.push("      var res = arr[i+1]; var callName = firstToolName(m); var callBlock = null;");
+  js.push("      var c = m.content_json; try { c = JSON.parse(c); if (typeof c === 'string') c = JSON.parse(c); } catch(e){} ");
+  js.push("      var thinkingBlock = null;");
+  js.push("      if (Array.isArray(c)) c.forEach(function(b){ if (b && (b.type === 'toolCall' || b.type === 'tool_use')) callBlock = b; else if (b && b.type === 'thinking') thinkingBlock = b; });");
+  js.push("      var resultText = ''; var rc = res.content_json; try { rc = JSON.parse(rc); if (typeof rc === 'string') rc = JSON.parse(rc); } catch(e){} ");
+  js.push("      if (typeof rc === 'string') resultText = rc;");
+  js.push("      else if (Array.isArray(rc)) rc.forEach(function(b){ if (typeof b === 'string') resultText += b + '\\n'; else if (b && b.type === 'text') resultText += (b.text || '') + '\\n'; });");
+  js.push("      else if (rc) resultText = JSON.stringify(rc, null, 2);");
+  js.push("      var blocks = []; if (thinkingBlock) blocks.push(thinkingBlock); if (callBlock) blocks.push(callBlock); if (resultText) blocks.push({ type:'text', text: resultText });");
+  js.push("      out.push({ role:'tool', tool_name: res.tool_name || callName || 'tool', is_error: res.is_error, content_json: JSON.stringify(blocks), timestamp: m.timestamp, seq: m.seq });");
+  js.push("      i++;");
+  js.push("    } else { out.push(m); }");
+  js.push("  }");
+  js.push("  return out;");
+  js.push("}");
   js.push("function groupActivity(msgs){");
   js.push("  var items = []; var cur = null;");
   js.push("  (msgs || []).forEach(function(m){");
@@ -6343,16 +6377,24 @@ function buildJs() {
   js.push("    else { if (cur){ items.push(cur); cur = null; } items.push({ type:'msg', m:m }); }");
   js.push("  });");
   js.push("  if (cur) items.push(cur);");
-  js.push("  return items;");
+  js.push("  return items.map(function(it){ if (it.type === 'activity' && it.msgs.length === 1) return { type:'msg', m:it.msgs[0] }; return it; });");
   js.push("}");
   js.push("function renderActivityMsg(m){");
   js.push("  var role = m.role;");
   js.push("  if (role === 'tool' || role === 'toolResult'){");
-  js.push("    var text = ''; var c = m.content_json; try { c = JSON.parse(c); } catch(e){}");
-  js.push("    if (typeof c === 'string') text = c;");
-  js.push("    else if (Array.isArray(c)){ c.forEach(function(b){ if (typeof b === 'string') text += b + '\\n'; else if (b && b.type === 'text') text += (b.text||'') + '\\n'; }); }");
-  js.push("    else if (c) text = JSON.stringify(c, null, 2);");
   js.push("    var isErr = m.is_error === true || m.is_error === 1;");
+  js.push("    var c = m.content_json; try { c = JSON.parse(c); } catch(e){}");
+  js.push("    if (Array.isArray(c)){");
+  js.push("      var out = '';");
+  js.push("      c.forEach(function(b){");
+  js.push(`        if (b && b.type === 'thinking') out += '<details class="msg-collapse" data-type="thinking"><summary>\u{1F4AD} \u601D\u8003\u8FC7\u7A0B</summary><div class="thinking">' + esc(b.thinking || '') + '</div></details>';`);
+  js.push(`        else if (b && (b.type === 'toolCall' || b.type === 'tool_use')) out += '<div class="actool"><details><summary>\u{1F527} ' + esc(b.name || 'tool') + '</summary>' + toolCallCard(b) + '</details></div>';`);
+  js.push(`        else if (typeof b === 'string') out += '<div class="actres"><details><summary>\u{1F4E6} ' + (isErr ? '\u26A0 ' : '') + esc(m.tool_name || '\u5DE5\u5177\u7ED3\u679C') + '</summary><pre>' + esc(b.substring(0,4000)) + '</pre></details></div>';`);
+  js.push(`        else if (b && b.type === 'text') out += '<div class="actres"><details><summary>\u{1F4E6} ' + (isErr ? '\u26A0 ' : '') + esc(m.tool_name || '\u5DE5\u5177\u7ED3\u679C') + '</summary><pre>' + esc((b.text||'').substring(0,4000)) + '</pre></details></div>';`);
+  js.push("      });");
+  js.push("      return out;");
+  js.push("    }");
+  js.push("    var text = (typeof c === 'string') ? c : (c ? JSON.stringify(c, null, 2) : '');");
   js.push(`    return '<div class="actres' + (isErr ? ' err' : '') + '"><details><summary>\u{1F4E6} ' + (isErr ? '\u26A0 ' : '') + esc(m.tool_name || '\u5DE5\u5177\u7ED3\u679C') + '</summary>' + (text ? '<pre>' + esc(text.substring(0, 4000)) + '</pre>' : '') + '</details></div>';`);
   js.push("  }");
   js.push("  var c2 = m.content_json; try { c2 = JSON.parse(c2); if (typeof c2 === 'string') c2 = JSON.parse(c2); } catch(e){}");
@@ -6384,7 +6426,7 @@ function buildJs() {
   js.push("  var name, avatar;");
   js.push("  if (isUser) { name = (msg.sender) || (currentSession && (currentSession.sender_name || currentSession.label)) || '\u7528\u6237'; avatar = name.slice(-1); }");
   js.push("  else if (role === 'assistant') { name = agentLabel(currentSession && currentSession.agent_id); avatar = '\u{1F99E}'; }");
-  js.push("  else { name = 'toolResult'; avatar = '\u{1F527}'; }");
+  js.push("  else { name = 'Tool'; avatar = '\u{1F527}'; }");
   js.push("  var body = renderContent(msg);");
   js.push("  var dt = msgDataType(role, msg.content_json);");
   js.push(`  var dataTypeAttr = dt ? ' data-type=\\"' + dt + '\\"' : '';`);
@@ -6393,7 +6435,7 @@ function buildJs() {
   js.push("  return html;");
   js.push("}");
   js.push("function renderMessages(msgs){");
-  js.push("  var items = groupActivity(msgs || []);");
+  js.push("  var items = groupActivity(coalesceToolActivity(msgs || []));");
   js.push(`  var html = '<div id="msgTop"></div>';`);
   js.push("  items.forEach(function(it){ html += renderItem(it); });");
   js.push(`  html += '<div id="msgBottom"></div>';`);
@@ -6985,6 +7027,66 @@ function countToolsTs(msgs) {
   });
   return calls || res;
 }
+function isToolCallOnlyTs(m) {
+  if (m.role !== "assistant") return false;
+  const c = parseCjTs(m.content_json);
+  if (!Array.isArray(c)) return false;
+  const hasText = c.some(function(b) {
+    return b && b.type === "text" && (b.text || "").trim() || typeof b === "string" && b.trim();
+  });
+  if (hasText) return false;
+  return c.some(function(b) {
+    return b && (b.type === "toolCall" || b.type === "tool_use");
+  });
+}
+function firstToolNameTs(m) {
+  const c = parseCjTs(m.content_json);
+  if (!Array.isArray(c)) return "";
+  for (let i = 0; i < c.length; i++) {
+    if (c[i] && (c[i].type === "toolCall" || c[i].type === "tool_use")) return c[i].name || "";
+  }
+  return "";
+}
+function coalesceToolActivityTs(msgs) {
+  const out = [];
+  const arr = msgs || [];
+  for (let i = 0; i < arr.length; i++) {
+    const m = arr[i];
+    if (isToolCallOnlyTs(m) && i + 1 < arr.length && (arr[i + 1].role === "tool" || arr[i + 1].role === "toolResult")) {
+      const res = arr[i + 1];
+      const callName = firstToolNameTs(m);
+      let callBlock = null;
+      let thinkingBlock = null;
+      const c = parseCjTs(m.content_json);
+      if (Array.isArray(c)) c.forEach(function(b) {
+        if (b && (b.type === "toolCall" || b.type === "tool_use")) callBlock = b;
+        else if (b && b.type === "thinking") thinkingBlock = b;
+      });
+      let resultText = "";
+      let rc = res.content_json;
+      try {
+        rc = JSON.parse(rc);
+        if (typeof rc === "string") rc = JSON.parse(rc);
+      } catch (e) {
+      }
+      if (typeof rc === "string") resultText = rc;
+      else if (Array.isArray(rc)) rc.forEach(function(b) {
+        if (typeof b === "string") resultText += b + "\n";
+        else if (b && b.type === "text") resultText += (b.text || "") + "\n";
+      });
+      else if (rc) resultText = JSON.stringify(rc, null, 2);
+      const blocks = [];
+      if (thinkingBlock) blocks.push(thinkingBlock);
+      if (callBlock) blocks.push(callBlock);
+      if (resultText) blocks.push({ type: "text", text: resultText });
+      out.push({ role: "tool", tool_name: res.tool_name || callName || "tool", is_error: res.is_error, content_json: JSON.stringify(blocks), timestamp: m.timestamp, seq: m.seq });
+      i++;
+    } else {
+      out.push(m);
+    }
+  }
+  return out;
+}
 function groupActivityTs(msgs) {
   const items = [];
   let cur = null;
@@ -7002,20 +7104,27 @@ function groupActivityTs(msgs) {
     }
   });
   if (cur) items.push(cur);
-  return items;
+  return items.map(function(it) {
+    if (it.type === "activity" && it.msgs.length === 1) return { type: "msg", m: it.msgs[0] };
+    return it;
+  });
 }
 function renderActivityMsgTs(m) {
   const role = m.role;
   if (role === "tool" || role === "toolResult") {
-    const c = parseCjTs(m.content_json);
-    let text2 = "";
-    if (typeof c === "string") text2 = c;
-    else if (Array.isArray(c)) c.forEach(function(b) {
-      if (typeof b === "string") text2 += b + "\n";
-      else if (b && b.type === "text") text2 += (b.text || "") + "\n";
-    });
-    else if (c) text2 = JSON.stringify(c, null, 2);
     const isErr = m.is_error === true || m.is_error === 1;
+    const c = parseCjTs(m.content_json);
+    if (Array.isArray(c)) {
+      let out2 = "";
+      c.forEach(function(b) {
+        if (b && b.type === "thinking") out2 += '<details class="msg-collapse" data-type="thinking"><summary>\u{1F4AD} \u601D\u8003\u8FC7\u7A0B</summary><div class="thinking">' + escHtml(b.thinking || "") + "</div></details>";
+        else if (b && (b.type === "toolCall" || b.type === "tool_use")) out2 += '<div class="actool"><details><summary>\u{1F527} ' + escHtml(b.name || "tool") + "</summary>" + toolCallCardTs(b) + "</details></div>";
+        else if (typeof b === "string") out2 += '<div class="actres"><details><summary>\u{1F4E6} ' + (isErr ? "\u26A0 " : "") + escHtml(m.tool_name || "\u5DE5\u5177\u7ED3\u679C") + "</summary><pre>" + escHtml(b.substring(0, 4e3)) + "</pre></details></div>";
+        else if (b && b.type === "text") out2 += '<div class="actres"><details><summary>\u{1F4E6} ' + (isErr ? "\u26A0 " : "") + escHtml(m.tool_name || "\u5DE5\u5177\u7ED3\u679C") + "</summary><pre>" + escHtml((b.text || "").substring(0, 4e3)) + "</pre></details></div>";
+      });
+      return out2;
+    }
+    let text2 = typeof c === "string" ? c : c ? JSON.stringify(c, null, 2) : "";
     return '<div class="actres' + (isErr ? " err" : "") + '"><details><summary>\u{1F4E6} ' + (isErr ? "\u26A0 " : "") + escHtml(m.tool_name || "\u5DE5\u5177\u7ED3\u679C") + "</summary>" + (text2 ? "<pre>" + escHtml(text2.substring(0, 4e3)) + "</pre>" : "") + "</details></div>";
   }
   const c2 = parseCjTs(m.content_json);
@@ -7046,7 +7155,7 @@ function renderMessageHtml(m) {
   const role = m.role || "unknown";
   const isUser = role === "user";
   const isTool = role === "tool" || role === "toolResult";
-  const cls = isUser ? "user" : "bot";
+  const cls = isUser ? "user" : isTool ? "user" : "bot";
   let name = "", avatar = "";
   if (isUser) {
     name = m.sender || m.sender_name || m.label || "\u7528\u6237";
@@ -7066,7 +7175,7 @@ function renderMessageHtml(m) {
   return '<article class="message ' + cls + emptyCls + '"' + dataTypeAttr + '><div class="mavatar">' + escHtml(avatar) + '</div><div class="mbody"><div class="mmeta"><strong>' + escHtml(name) + "</strong><span>" + fmtTimeShort(m.timestamp) + "</span></div>" + body + "</div></article>";
 }
 function renderMessagesHtml(msgs) {
-  const items = groupActivityTs(msgs);
+  const items = groupActivityTs(coalesceToolActivityTs(msgs));
   let html = '<div id="msgTop"></div>';
   items.forEach(function(it) {
     html += renderItemTs(it);
