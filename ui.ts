@@ -645,7 +645,7 @@ function buildJs() {
   // Reveal the real UI only after the script has run (i.e. the document is
   // not in a strict sandbox without allow-scripts). In a strict sandbox this
   // line never executes and the <noscript> guide stays visible instead.
-  js.push("document.getElementById('app').style.display='flex';");
+  js.push("var _app=document.getElementById('app'); if(_app){_app.style.display='flex';}");
   return js.join("\n");
 }
 
@@ -668,7 +668,7 @@ function buildListHtml(state) {
   lines.push("</head>");
   lines.push("<body class=\"page-list\">");
   lines.push("<noscript><div class='noscript-guide'><div class='noscript-guide-inner'><h2><span class='dot'></span>正在加载中</h2><p>本插件需要脚本初始化才能使用。<br>请点击左侧任意菜单（如「概览」「活动」），再回到本页即可恢复正常。</p></div></div></noscript>");
-  lines.push("<main class=\"app\">");
+  lines.push("<main class=\"app\" id=\"app\">");
   lines.push("  <header class=\"top\">");
   lines.push("    <h1>会话记录</h1>");
   lines.push("    <p>查找并回溯 Agent 与用户的历史对话</p>");
@@ -971,7 +971,7 @@ function buildDetailHtml(state) {
   L.push("</head>");
   L.push("<body class=\"page-detail\">");
   L.push("<noscript><div class='noscript-guide'><div class='noscript-guide-inner'><h2><span class='dot'></span>正在加载中</h2><p>本插件需要脚本初始化才能使用。<br>请点击左侧任意菜单（如「概览」「活动」），再回到本页即可恢复正常。</p></div></div></noscript>");
-  L.push("<main class=\"app\">");
+  L.push("<main class=\"app\" id=\"app\">");
   L.push("  <header class=\"top\"><div class=\"head-row\"><div class=\"head-left\"><h1>对话详情</h1><p>" + escHtml(s.display_name || "-") + "</p></div><div class=\"head-right\"><a class=\"btn secondary\" href=\"?\">← 返回列表</a><a class=\"btn primary\" href=\"?session=" + key + "&dl=1\">↧ 导出</a></div></div></header>");
   L.push("  <section class=\"card\" style=\"padding:18px 20px;margin-bottom:16px\"><div style=\"display:flex;gap:28px;flex-wrap:wrap\">");
   L.push("    <div style=\"display:flex;flex-direction:column;gap:2px\"><span style=\"color:var(--muted);font-size:12px\">Agent</span><strong>" + escHtml(s.agent_id || "未知") + "</strong></div>");
@@ -993,7 +993,7 @@ function buildDetailHtml(state) {
   L.push("    <a class=\"jump-btn\" href=\"#msgTop\" aria-label=\"到最早的消息\">▲ 顶部</a>");
   L.push("  </div>");
   L.push("</main>");
-  L.push("<script>document.getElementById('app').style.display='flex';</script>");
+  L.push("<script>var _app=document.getElementById('app'); if(_app){_app.style.display='flex';}</script>");
   L.push("</body>");
   L.push("</html>");
   return L.join("\n");

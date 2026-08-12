@@ -6710,7 +6710,7 @@ function buildJs() {
   js.push("  $('msgSearch').addEventListener('keydown', function(e){ if (e.key === 'Enter') { clearTimeout(this._timer); doMsgSearch(); } });");
   js.push("  $('searchClear').addEventListener('click', clearMsgSearch);");
   js.push("});");
-  js.push("document.getElementById('app').style.display='flex';");
+  js.push("var _app=document.getElementById('app'); if(_app){_app.style.display='flex';}");
   return js.join("\n");
 }
 function buildListHtml(state) {
@@ -6734,7 +6734,7 @@ function buildListHtml(state) {
   lines.push("</head>");
   lines.push('<body class="page-list">');
   lines.push("<noscript><div class='noscript-guide'><div class='noscript-guide-inner'><h2><span class='dot'></span>\u6B63\u5728\u52A0\u8F7D\u4E2D</h2><p>\u672C\u63D2\u4EF6\u9700\u8981\u811A\u672C\u521D\u59CB\u5316\u624D\u80FD\u4F7F\u7528\u3002<br>\u8BF7\u70B9\u51FB\u5DE6\u4FA7\u4EFB\u610F\u83DC\u5355\uFF08\u5982\u300C\u6982\u89C8\u300D\u300C\u6D3B\u52A8\u300D\uFF09\uFF0C\u518D\u56DE\u5230\u672C\u9875\u5373\u53EF\u6062\u590D\u6B63\u5E38\u3002</p></div></div></noscript>");
-  lines.push('<main class="app">');
+  lines.push('<main class="app" id="app">');
   lines.push('  <header class="top">');
   lines.push("    <h1>\u4F1A\u8BDD\u8BB0\u5F55</h1>");
   lines.push("    <p>\u67E5\u627E\u5E76\u56DE\u6EAF Agent \u4E0E\u7528\u6237\u7684\u5386\u53F2\u5BF9\u8BDD</p>");
@@ -7092,7 +7092,7 @@ function buildDetailHtml(state) {
   L.push("</head>");
   L.push('<body class="page-detail">');
   L.push("<noscript><div class='noscript-guide'><div class='noscript-guide-inner'><h2><span class='dot'></span>\u6B63\u5728\u52A0\u8F7D\u4E2D</h2><p>\u672C\u63D2\u4EF6\u9700\u8981\u811A\u672C\u521D\u59CB\u5316\u624D\u80FD\u4F7F\u7528\u3002<br>\u8BF7\u70B9\u51FB\u5DE6\u4FA7\u4EFB\u610F\u83DC\u5355\uFF08\u5982\u300C\u6982\u89C8\u300D\u300C\u6D3B\u52A8\u300D\uFF09\uFF0C\u518D\u56DE\u5230\u672C\u9875\u5373\u53EF\u6062\u590D\u6B63\u5E38\u3002</p></div></div></noscript>");
-  L.push('<main class="app">');
+  L.push('<main class="app" id="app">');
   L.push('  <header class="top"><div class="head-row"><div class="head-left"><h1>\u5BF9\u8BDD\u8BE6\u60C5</h1><p>' + escHtml(s.display_name || "-") + '</p></div><div class="head-right"><a class="btn secondary" href="?">\u2190 \u8FD4\u56DE\u5217\u8868</a><a class="btn primary" href="?session=' + key + '&dl=1">\u21A7 \u5BFC\u51FA</a></div></div></header>');
   L.push('  <section class="card" style="padding:18px 20px;margin-bottom:16px"><div style="display:flex;gap:28px;flex-wrap:wrap">');
   L.push('    <div style="display:flex;flex-direction:column;gap:2px"><span style="color:var(--muted);font-size:12px">Agent</span><strong>' + escHtml(s.agent_id || "\u672A\u77E5") + "</strong></div>");
@@ -7114,7 +7114,7 @@ function buildDetailHtml(state) {
   L.push('    <a class="jump-btn" href="#msgTop" aria-label="\u5230\u6700\u65E9\u7684\u6D88\u606F">\u25B2 \u9876\u90E8</a>');
   L.push("  </div>");
   L.push("</main>");
-  L.push("<script>document.getElementById('app').style.display='flex';</script>");
+  L.push("<script>var _app=document.getElementById('app'); if(_app){_app.style.display='flex';}</script>");
   L.push("</body>");
   L.push("</html>");
   return L.join("\n");
