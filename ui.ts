@@ -67,6 +67,14 @@ const MARKDOWN_CSS = [
   ".noscript-guide h2{margin:0 0 12px;font-size:16px;font-weight:700;color:#0f7a74;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}",
   ".noscript-guide h2 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 4px rgba(22,143,137,.18);animation:pulse 1.6s ease-in-out infinite}",
   ".noscript-guide p{margin:0;font-size:13.5px;line-height:1.75;color:#3a3833}",
+  ".noscript-guide .lang-switch{display:flex;gap:8px;margin:0 0 14px}",
+  ".noscript-guide .lang-tab{display:inline-block;cursor:pointer;padding:4px 16px;border:1px solid var(--line);border-radius:999px;font-size:12.5px;color:var(--muted);user-select:none;background:var(--paper)}",
+  ".noscript-guide input[name=sa-lang]{position:absolute;opacity:0;width:0;height:0;pointer-events:none}",
+  ".noscript-guide #sa-zh:checked~.lang-tab[for=sa-zh],.noscript-guide #sa-en:checked~.lang-tab[for=sa-en]{color:#fff;background:var(--teal);border-color:var(--teal)}",
+  ".noscript-guide .lang-block{display:none}",
+  ".noscript-guide #sa-zh:checked~.lang-zh{display:block}",
+  ".noscript-guide #sa-en:checked~.lang-en{display:block}",
+  ".noscript-guide .lang-zh p,.noscript-guide .lang-en p{margin:0;font-size:13.5px;line-height:1.85;color:#3a3833}",
   "@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.85)}}",
 ].join("");
 
@@ -667,7 +675,7 @@ function buildListHtml(state) {
   if (mdSrc) lines.push("<script>" + mdSrc + "</script>");
   lines.push("</head>");
   lines.push("<body class=\"page-list\">");
-  lines.push("<noscript><div class='noscript-guide'><div class='noscript-guide-inner'><h2><span class='dot'></span>正在加载中</h2><p>本插件需要脚本初始化才能使用。<br>请点击左侧任意菜单（如「概览」「活动」），再回到本页即可恢复正常。</p></div></div></noscript>");
+  lines.push("<noscript><div class='noscript-guide'><div class='noscript-guide-inner'><h2><span class='dot'></span>温馨提示</h2><input type='radio' name='sa-lang' id='sa-zh' checked><label class='lang-tab' for='sa-zh'>中文</label><input type='radio' name='sa-lang' id='sa-en'><label class='lang-tab' for='sa-en'>English</label><div class='lang-block lang-zh'><p>本插件受 openclaw 沙箱安全策略限制，每次刷新时页面脚本可能未能正常执行，导致功能暂时不可用。请点击左侧任意菜单（如「概览」「活动」），再回到本页即可恢复正常。</p></div><div class='lang-block lang-en'><p>This plugin is restricted by openclaw's sandbox security policy. Each refresh may fail to run the page scripts, leaving the page temporarily unusable. Please click any left-side menu (e.g. \"Overview\" / \"Activity\"), then return to this page to restore normal function.</p></div></div></div></noscript>");
   lines.push("<main class=\"app\" id=\"app\">");
   lines.push("  <header class=\"top\">");
   lines.push("    <h1>会话记录</h1>");
@@ -970,7 +978,7 @@ function buildDetailHtml(state) {
   L.push("<style>" + MARKDOWN_CSS + "</style>");
   L.push("</head>");
   L.push("<body class=\"page-detail\">");
-  L.push("<noscript><div class='noscript-guide'><div class='noscript-guide-inner'><h2><span class='dot'></span>正在加载中</h2><p>本插件需要脚本初始化才能使用。<br>请点击左侧任意菜单（如「概览」「活动」），再回到本页即可恢复正常。</p></div></div></noscript>");
+  L.push("<noscript><div class='noscript-guide'><div class='noscript-guide-inner'><h2><span class='dot'></span>温馨提示</h2><input type='radio' name='sa-lang' id='sa-zh' checked><label class='lang-tab' for='sa-zh'>中文</label><input type='radio' name='sa-lang' id='sa-en'><label class='lang-tab' for='sa-en'>English</label><div class='lang-block lang-zh'><p>本插件受 openclaw 沙箱安全策略限制，每次刷新时页面脚本可能未能正常执行，导致功能暂时不可用。请点击左侧任意菜单（如「概览」「活动」），再回到本页即可恢复正常。</p></div><div class='lang-block lang-en'><p>This plugin is restricted by openclaw's sandbox security policy. Each refresh may fail to run the page scripts, leaving the page temporarily unusable. Please click any left-side menu (e.g. \"Overview\" / \"Activity\"), then return to this page to restore normal function.</p></div></div></div></noscript>");
   L.push("<main class=\"app\" id=\"app\">");
   L.push("  <header class=\"top\"><div class=\"head-row\"><div class=\"head-left\"><h1>对话详情</h1><p>" + escHtml(s.display_name || "-") + "</p></div><div class=\"head-right\"><a class=\"btn secondary\" href=\"?\">← 返回列表</a><a class=\"btn primary\" href=\"?session=" + key + "&dl=1\">↧ 导出</a></div></div></header>");
   L.push("  <section class=\"card\" style=\"padding:18px 20px;margin-bottom:16px\"><div style=\"display:flex;gap:28px;flex-wrap:wrap\">");
