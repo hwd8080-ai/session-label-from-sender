@@ -554,9 +554,16 @@ function createAdminApiHandler(api: unknown) {
           });
         } catch {}
         const result = getMessages(db, key, 100000);
+        // 导出时是否包含工具 / 思考，跟随前端「工具」「思考」开关（默认都包含）。
+        const toolsParam = url.searchParams.get("tools");
+        const thinkParam = url.searchParams.get("thinking");
+        const exportOpts = {
+          tools: toolsParam === null ? true : toolsParam === "1",
+          thinking: thinkParam === null ? true : thinkParam === "1",
+        };
         // 单会话导出上限 10MB：超过则截断并提示，避免超大会话打爆内存 / 剪贴板卡死。
         const EXPORT_BYTE_BUDGET = 10 * 1024 * 1024;
-        const built = buildExportText(session, result.messages, EXPORT_BYTE_BUDGET);
+        const built = buildExportText(session, result.messages, EXPORT_BYTE_BUDGET, exportOpts);
         const text = built.text;
         const truncated = built.truncated;
         const displayName = session.display_name || session.sender_name || "会话";

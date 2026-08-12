@@ -6565,8 +6565,9 @@ function buildJs() {
   js.push("async function exportConv(){");
   js.push("  if (!selectedKey) return;");
   js.push("  var b = $('fabCopy'); b.disabled = true; var old = b.textContent; b.textContent = '\u5BFC\u51FA\u4E2D\u2026';");
+  js.push("  var qs = '?key=' + encodeURIComponent(selectedKey) + '&tools=' + (showTools ? '1' : '0') + '&thinking=' + (showThinking ? '1' : '0');");
   js.push("  try {");
-  js.push("    var res = await fetch(API + '/export?key=' + encodeURIComponent(selectedKey));");
+  js.push("    var res = await fetch(API + '/export' + qs);");
   js.push("    if (!res.ok) throw new Error('HTTP ' + res.status);");
   js.push("    var text = (await res.text()).replace(/^\\uFEFF/, '');");
   js.push("    var bytes = text.length;");
@@ -6575,7 +6576,11 @@ function buildJs() {
   js.push("      try { await navigator.clipboard.writeText(text); copied = true; } catch (_) {}");
   js.push("    }");
   js.push("    if (!copied) { fallbackCopy(text); copied = true; }");
-  js.push("    b.textContent = '\u5DF2\u590D\u5236 ' + bytes + ' \u5B57';");
+  js.push("    var note = '';");
+  js.push("    if (!showTools && !showThinking) note = '\uFF08\u5DF2\u9690\u85CF\u5DE5\u5177\u4E0E\u601D\u8003\uFF09';");
+  js.push("    else if (!showTools) note = '\uFF08\u5DF2\u9690\u85CF\u5DE5\u5177\uFF09';");
+  js.push("    else if (!showThinking) note = '\uFF08\u5DF2\u9690\u85CF\u601D\u8003\uFF09';");
+  js.push("    b.textContent = '\u5DF2\u590D\u5236 ' + bytes + ' \u5B57' + note;");
   js.push("    setTimeout(function(){ b.textContent = old; b.disabled = false; }, 1800);");
   js.push("  } catch (e) {");
   js.push("    b.textContent = '\u5BFC\u51FA\u5931\u8D25';");
@@ -7123,7 +7128,9 @@ function buildDetailHtml(state) {
   L.push("</html>");
   return L.join("\n");
 }
-function plainTextTs(m) {
+function plainTextTs(m, opts) {
+  const includeTools = !opts || opts.tools !== false;
+  const includeThinking = !opts || opts.thinking !== false;
   const cj = m.content_json;
   if (cj == null || cj === "") return "";
   let c;
@@ -7137,8 +7144,12 @@ function plainTextTs(m) {
     let out = "";
     c.forEach(function(b) {
       if (typeof b === "string") out += b + "\n";
-      else if (b && b.type === "text") out += (b.text || "") + "\n";
-      else if (b.type === "toolCall" || b.type === "tool_use") out += "[\u8C03\u7528\u5DE5\u5177 " + (b.name || "") + "]\n";
+      else if (b && b.type === "thinking") {
+        if (includeThinking) out += "[\u601D\u8003] " + (b.thinking || "") + "\n";
+      } else if (b.type === "text") out += (b.text || "") + "\n";
+      else if (b.type === "toolCall" || b.type === "tool_use") {
+        if (includeTools) out += "[\u8C03\u7528\u5DE5\u5177 " + (b.name || "") + "]\n";
+      }
     });
     return out;
   }
@@ -7147,7 +7158,7 @@ function plainTextTs(m) {
     if (Array.isArray(c)) {
       let t = "";
       c.forEach(function(b) {
-        t += (typeof b === "string" ? b : b && b.text ? b.text : "") + "\n";
+        if (includeTools) t += (typeof b === "string" ? b : b && b.text ? b.text : "") + "\n";
       });
       return t;
     }
@@ -7155,16 +7166,19 @@ function plainTextTs(m) {
   }
   return JSON.stringify(c, null, 2);
 }
-function buildExportText(session, messages, byteBudget) {
+function buildExportText(session, messages, byteBudget, opts) {
+  const includeTools = !opts || opts.tools !== false;
+  const includeThinking = !opts || opts.thinking !== false;
   const lines = [];
   lines.push("\u4F1A\u8BDD\uFF1A" + (session.display_name || session.sender_name || session.session_id || ""));
   lines.push("Agent\uFF1A" + (session.agent_id || ""));
   lines.push("\u6765\u6E90\uFF1A" + sourceLabelTs(session.channel) + "  \u5206\u7C7B\uFF1A" + catLabelTs(session));
   lines.push("");
   messages.forEach(function(m) {
+    if (!includeTools && (m.role === "tool" || m.role === "toolResult")) return;
     const who = m.role === "user" ? m.sender || session.sender_name || session.label || "\u7528\u6237" : m.role === "assistant" ? session.agent_id || "Assistant" : m.tool_name || "\u5DE5\u5177";
     lines.push(who + " " + fmtTimeShort(m.timestamp));
-    lines.push(plainTextTs(m));
+    lines.push(plainTextTs(m, { tools: includeTools, thinking: includeThinking }));
     lines.push("");
   });
   let text2 = lines.join("\n");
@@ -7605,8 +7619,14 @@ function createAdminApiHandler(api) {
         } catch {
         }
         const result = getMessages(db, key, 1e5);
+        const toolsParam = url.searchParams.get("tools");
+        const thinkParam = url.searchParams.get("thinking");
+        const exportOpts = {
+          tools: toolsParam === null ? true : toolsParam === "1",
+          thinking: thinkParam === null ? true : thinkParam === "1"
+        };
         const EXPORT_BYTE_BUDGET = 10 * 1024 * 1024;
-        const built = buildExportText(session, result.messages, EXPORT_BYTE_BUDGET);
+        const built = buildExportText(session, result.messages, EXPORT_BYTE_BUDGET, exportOpts);
         const text2 = built.text;
         const truncated = built.truncated;
         const displayName = session.display_name || session.sender_name || "\u4F1A\u8BDD";

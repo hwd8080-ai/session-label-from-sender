@@ -486,8 +486,9 @@ function buildJs() {
   js.push("async function exportConv(){");
   js.push("  if (!selectedKey) return;");
   js.push("  var b = $('fabCopy'); b.disabled = true; var old = b.textContent; b.textContent = '导出中…';");
+  js.push("  var qs = '?key=' + encodeURIComponent(selectedKey) + '&tools=' + (showTools ? '1' : '0') + '&thinking=' + (showThinking ? '1' : '0');");
   js.push("  try {");
-  js.push("    var res = await fetch(API + '/export?key=' + encodeURIComponent(selectedKey));");
+  js.push("    var res = await fetch(API + '/export' + qs);");
   js.push("    if (!res.ok) throw new Error('HTTP ' + res.status);");
   js.push("    var text = (await res.text()).replace(/^\\uFEFF/, '');");
   js.push("    var bytes = text.length;");
@@ -496,7 +497,11 @@ function buildJs() {
   js.push("      try { await navigator.clipboard.writeText(text); copied = true; } catch (_) {}");
   js.push("    }");
   js.push("    if (!copied) { fallbackCopy(text); copied = true; }");
-  js.push("    b.textContent = '已复制 ' + bytes + ' 字';");
+  js.push("    var note = '';");
+  js.push("    if (!showTools && !showThinking) note = '（已隐藏工具与思考）';");
+  js.push("    else if (!showTools) note = '（已隐藏工具）';");
+  js.push("    else if (!showThinking) note = '（已隐藏思考）';");
+  js.push("    b.textContent = '已复制 ' + bytes + ' 字' + note;");
   js.push("    setTimeout(function(){ b.textContent = old; b.disabled = false; }, 1800);");
   js.push("  } catch (e) {");
   js.push("    b.textContent = '导出失败';");
@@ -995,7 +1000,9 @@ function buildDetailHtml(state) {
   L.push("</html>");
   return L.join("\n");
 }
-function plainTextTs(m) {
+function plainTextTs(m, opts) {
+  const includeTools = !opts || opts.tools !== false;
+  const includeThinking = !opts || opts.thinking !== false;
   const cj = m.content_json;
   if (cj == null || cj === "") return "";
   let c;
@@ -1005,28 +1012,32 @@ function plainTextTs(m) {
     let out = "";
     c.forEach(function (b) {
       if (typeof b === "string") out += b + "\n";
-      else if (b && b.type === "text") out += (b.text || "") + "\n";
-      else if (b.type === "toolCall" || b.type === "tool_use") out += "[调用工具 " + (b.name || "") + "]\n";
+      else if (b && b.type === "thinking") { if (includeThinking) out += "[思考] " + (b.thinking || "") + "\n"; }
+      else if (b.type === "text") out += (b.text || "") + "\n";
+      else if (b.type === "toolCall" || b.type === "tool_use") { if (includeTools) out += "[调用工具 " + (b.name || "") + "]\n"; }
     });
     return out;
   }
   if (m.role === "tool" || m.role === "toolResult") {
     if (typeof c === "string") return c;
-    if (Array.isArray(c)) { let t = ""; c.forEach(function (b) { t += (typeof b === "string" ? b : (b && b.text ? b.text : "")) + "\n"; }); return t; }
+    if (Array.isArray(c)) { let t = ""; c.forEach(function (b) { if (includeTools) t += (typeof b === "string" ? b : (b && b.text ? b.text : "")) + "\n"; }); return t; }
     return JSON.stringify(c, null, 2);
   }
   return JSON.stringify(c, null, 2);
 }
-export function buildExportText(session, messages, byteBudget) {
+export function buildExportText(session, messages, byteBudget, opts) {
+  const includeTools = !opts || opts.tools !== false;
+  const includeThinking = !opts || opts.thinking !== false;
   const lines = [];
   lines.push("会话：" + (session.display_name || session.sender_name || session.session_id || ""));
   lines.push("Agent：" + (session.agent_id || ""));
   lines.push("来源：" + sourceLabelTs(session.channel) + "  分类：" + catLabelTs(session));
   lines.push("");
   messages.forEach(function (m) {
+    if (!includeTools && (m.role === "tool" || m.role === "toolResult")) return;
     const who = m.role === "user" ? (m.sender || session.sender_name || session.label || "用户") : (m.role === "assistant" ? (session.agent_id || "Assistant") : (m.tool_name || "工具"));
     lines.push(who + " " + fmtTimeShort(m.timestamp));
-    lines.push(plainTextTs(m));
+    lines.push(plainTextTs(m, { tools: includeTools, thinking: includeThinking }));
     lines.push("");
   });
   let text = lines.join("\n");
