@@ -29,35 +29,40 @@ OpenClaw 原生「会话」围绕 `sessionId` 组织，日常有两个原生后�
 
 ## 安装
 
-### 方式一：从 ClawHub 安装（推荐）
-
-在 OpenClaw 中执行以下命令安装，安装后按提示重启 Gateway 即可：
+### 方式一：ClawHub（推荐）
 
 ```bash
 openclaw plugins install clawhub:@hwd8080-ai/session-label-from-sender
 ```
 
-### 方式二：从源码构建部署
+安装完成后按提示重启 Gateway。
+
+### 方式二：源码构建
 
 ```bash
-# 1. 克隆仓库
-git clone https://github.com/hwd8080-ai/session-label-from-sender.git
-cd session-label-from-sender
-
-# 2. 构建（需要 Node >= 22.5，因为用到了 node:sqlite）
+# Windows 把 ~/.openclaw 换成 %USERPROFILE%\.openclaw
+git clone https://github.com/hwd8080-ai/session-label-from-sender.git ~/.openclaw/extensions/session-label-from-sender
+cd ~/.openclaw/extensions/session-label-from-sender
+npm install
 node build.mjs
-# 产物：根目录 index.mjs、dist/index.mjs、dist/md-client.js（esbuild 自包含 bundle）
-
-# 3. 部署到 OpenClaw 扩展目录
-mkdir -p ~/.openclaw/extensions/session-label-from-sender
-cp index.mjs openclaw.plugin.json ~/.openclaw/extensions/session-label-from-sender/
-cp -r dist ~/.openclaw/extensions/session-label-from-sender/
-
-# 4. 重启 daemon 使生效
 openclaw daemon restart
 ```
 
-安装后，在 OpenClaw 控制界面的「更多」区域会看到 **会话记录（Session Admin）** 标签页，点击进入即可。
+源码构建不会自动修改 `~/.openclaw/openclaw.json`。请在其中手动加入以下配置启用本插件，然后重启 daemon：
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "session-label-from-sender": { "enabled": true }
+    }
+  }
+}
+```
+
+保存后执行 `openclaw daemon restart`。
+
+安装后，在 OpenClaw 控制界面的「更多」区域会看到 **会话记录（Session Admin）** 标签页。
 
 ## 使用
 

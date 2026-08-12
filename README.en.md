@@ -29,35 +29,40 @@ Shows a full conversation on a timeline: user bubbles (right), assistant bubbles
 
 ## Install
 
-### Option 1: Install from ClawHub (recommended)
-
-Run the following command in OpenClaw, then restart the Gateway when prompted:
+### Option 1: ClawHub (recommended)
 
 ```bash
 openclaw plugins install clawhub:@hwd8080-ai/session-label-from-sender
 ```
 
-### Option 2: Build and deploy from source
+Restart the Gateway when prompted.
+
+### Option 2: Build from source
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/hwd8080-ai/session-label-from-sender.git
-cd session-label-from-sender
-
-# 2. Build (requires Node >= 22.5, because node:sqlite is used)
+# On Windows replace ~/.openclaw with %USERPROFILE%\.openclaw
+git clone https://github.com/hwd8080-ai/session-label-from-sender.git ~/.openclaw/extensions/session-label-from-sender
+cd ~/.openclaw/extensions/session-label-from-sender
+npm install
 node build.mjs
-# Outputs: root index.mjs, dist/index.mjs, dist/md-client.js (esbuild self-contained bundle)
-
-# 3. Deploy to the OpenClaw extensions directory
-mkdir -p ~/.openclaw/extensions/session-label-from-sender
-cp index.mjs openclaw.plugin.json ~/.openclaw/extensions/session-label-from-sender/
-cp -r dist ~/.openclaw/extensions/session-label-from-sender/
-
-# 4. Restart the daemon to apply
 openclaw daemon restart
 ```
 
-After installation, you'll see the **Session Admin** tab under the "More" area of the OpenClaw control UI. Click it to enter.
+Building from source does not modify `~/.openclaw/openclaw.json` automatically. Add the following config to enable the plugin, then restart the daemon:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "session-label-from-sender": { "enabled": true }
+    }
+  }
+}
+```
+
+Then run `openclaw daemon restart`.
+
+After installation, you'll see the **Session Admin** tab under the "More" area of the OpenClaw control UI.
 
 ## Usage
 
