@@ -6122,12 +6122,11 @@ var MARKDOWN_CSS = [
   ".bubble code{background:rgba(0,0,0,.05);padding:.1em .35em;border-radius:4px;font-family:ui-monospace,Menlo,monospace;font-size:.92em}",
   ".bubble pre code{background:none;padding:0;border-radius:0}",
   ".bubble img{max-width:100%;border-radius:8px;margin:.4em 0}",
-  // Override activity card to look like a normal message bubble.
-  ".activity{margin:0;background:#f8f7f4;border:1px solid #e8e3da;border-radius:12px;padding:12px 14px;line-height:1.65;font-size:14px;color:var(--ink);box-shadow:0 1px 3px rgba(37,36,33,.04)}",
-  ".activity>.ahead{list-style:none;display:flex;align-items:center;gap:8px;padding:0 0 10px;cursor:pointer;user-select:none;background:transparent;font-size:13px;color:var(--ink);border-bottom:1px solid #e8e3da;margin-bottom:10px}",
-  ".activity>.ahead:hover{background:transparent}",
-  ".activity>.abody{padding:0;display:flex;flex-direction:column;gap:8px}",
-  ".activity .actool,.activity .actres{background:var(--canvas);border:1px solid var(--line);border-radius:9px;padding:6px 10px}",
+  // Activity card styles live in the main CSS block (the big CSS string),
+  // NOT here. MARKDOWN_CSS is injected AFTER the main CSS and was silently
+  // overriding the transparent variant, so the outer bubble kept rendering
+  // as an opaque white card. Removed to avoid the override; main CSS is the
+  // single source of truth for .activity* rules.
   // Sandbox fallback: hide the real UI by default; only reveal it after the
   // client script runs (i.e. the document is NOT in a strict sandbox without
   // allow-scripts). In a strict sandbox the <noscript> guide shows instead,
