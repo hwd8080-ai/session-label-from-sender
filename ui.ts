@@ -196,6 +196,7 @@ function buildJs() {
   js.push("function hideEmptyMessages(){");
   js.push("  var box = $('messages'); if (!box) return;");
   js.push("  box.querySelectorAll('.message').forEach(function(el){");
+  js.push("    if (el.offsetHeight === 0) { el.classList.remove('filtered-empty'); return; }");
   js.push("    var body = el.querySelector('.mbody');");
   js.push("    if (!body) { el.classList.add('filtered-empty'); return; }");
   js.push("    var hasVisible = false;");
@@ -269,7 +270,7 @@ function buildJs() {
   js.push("function renderItem(item){");
   js.push("  if (item.type === 'msg') return renderMessage(item.m);");
   js.push("  var n = countTools(item.msgs);");
-  js.push("  var head = '<summary class=\"ahead\"><span class=\"achev\">▸</span><span class=\"aico\">🔧</span><span class=\"atitle\">Activity</span><span class=\"acount\">' + n + ' 个工具</span><span class=\"atime\">' + fmt(item.startTs) + (item.startTs !== item.endTs ? ' – ' + fmt(item.endTs) : '') + '</span></summary>';");
+  js.push("  var head = '<summary class=\"ahead\"><span class=\"achev\">▸</span><span class=\"aico\">🔧</span><span class=\"atitle\">Activity</span><span class=\"acount\">' + n + ' 个工具</span></summary>';");
   js.push("  var body = '<div class=\"abody\">';");
   js.push("  item.msgs.forEach(function(m){ body += renderActivityMsg(m); });");
   js.push("  body += '</div>';");
@@ -881,7 +882,7 @@ function renderActivityMsgTs(m) {
 function renderItemTs(item) {
   if (item.type === "msg") return renderMessageHtml(item.m);
   const n = countToolsTs(item.msgs);
-  const head = '<summary class="ahead"><span class="achev">▸</span><span class="aico">🔧</span><span class="atitle">Activity</span><span class="acount">' + n + ' 个工具</span><span class="atime">' + fmtTs(item.startTs) + (item.startTs !== item.endTs ? " – " + fmtTs(item.endTs) : "") + '</span></summary>';
+  const head = '<summary class="ahead"><span class="achev">▸</span><span class="aico">🔧</span><span class="atitle">Activity</span><span class="acount">' + n + ' 个工具</span></summary>';
   let body = '<div class="abody">';
   item.msgs.forEach(function (m) { body += renderActivityMsgTs(m); });
   body += '</div>';
