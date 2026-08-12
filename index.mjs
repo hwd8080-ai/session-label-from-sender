@@ -6160,7 +6160,7 @@ function buildJs() {
   js.push("  var name, avatar;");
   js.push("  if (isUser) { name = (currentSession && (currentSession.sender_name || currentSession.label)) || '\u7528\u6237'; avatar = name.slice(-1); }");
   js.push("  else if (role === 'assistant') { name = agentLabel(currentSession && currentSession.agent_id); avatar = '\u{1F99E}'; }");
-  js.push("  else { name = 'Tool'; avatar = '\u{1F527}'; }");
+  js.push("  else { name = 'toolResult'; avatar = '\u{1F527}'; }");
   js.push("  var body = renderContent(msg);");
   js.push(`  var dataTypeAttr = isTool ? ' data-type=\\"tool\\"' : '';`);
   js.push(`  if (isTool) { body = '<details class=\\"msg-collapse\\" data-type=\\"tool\\"><summary>\u{1F527} ' + esc(msg.tool_name || '\u5DE5\u5177\u8C03\u7528\u7ED3\u679C') + ' \xB7 ' + fmtTime(msg.timestamp) + '</summary>' + body + '</details>'; }`);

@@ -172,7 +172,7 @@ function buildJs() {
   js.push("  var name, avatar;");
   js.push("  if (isUser) { name = (currentSession && (currentSession.sender_name || currentSession.label)) || '用户'; avatar = name.slice(-1); }");
   js.push("  else if (role === 'assistant') { name = agentLabel(currentSession && currentSession.agent_id); avatar = '🦞'; }");
-  js.push("  else { name = 'Tool'; avatar = '🔧'; }");
+  js.push("  else { name = 'toolResult'; avatar = '🔧'; }");
   js.push("  var body = renderContent(msg);");
   js.push("  var dataTypeAttr = isTool ? ' data-type=\\\"tool\\\"' : '';");
   js.push("  if (isTool) { body = '<details class=\\\"msg-collapse\\\" data-type=\\\"tool\\\"><summary>\uD83D\uDD27 ' + esc(msg.tool_name || '\u5DE5\u5177\u8C03\u7528\u7ED3\u679C') + ' \u00B7 ' + fmtTime(msg.timestamp) + '</summary>' + body + '</details>'; }");
