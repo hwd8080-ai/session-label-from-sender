@@ -338,6 +338,7 @@ function initSchema(db) {
       token_output INTEGER NOT NULL DEFAULT 0,
       timestamp INTEGER NOT NULL DEFAULT 0,
       parent_id TEXT,
+      sender TEXT,
       PRIMARY KEY (session_key, id)
     );
 
@@ -355,6 +356,14 @@ function initSchema(db) {
     db.exec(
       "ALTER TABLE sessions ADD COLUMN is_group INTEGER NOT NULL DEFAULT 0"
     );
+  } catch {
+  }
+  try {
+    db.exec("ALTER TABLE messages ADD COLUMN sender TEXT");
+  } catch {
+  }
+  try {
+    db.exec("ALTER TABLE sessions DROP COLUMN participants");
   } catch {
   }
 }
@@ -589,11 +598,11 @@ function insertMessage(db, row) {
     INSERT OR IGNORE INTO messages (
       id, session_key, seq, role, type, content_json,
       model, provider, tool_name, tool_call_id, is_error,
-      token_input, token_output, timestamp, parent_id
+      token_input, token_output, timestamp, parent_id, sender
     ) VALUES (
       $id, $session_key, $seq, $role, $type, $content_json,
       $model, $provider, $tool_name, $tool_call_id, $is_error,
-      $token_input, $token_output, $timestamp, $parent_id
+      $token_input, $token_output, $timestamp, $parent_id, $sender
     )
   `);
   stmt.run({
@@ -611,7 +620,8 @@ function insertMessage(db, row) {
     $token_input: row.token_input ?? 0,
     $token_output: row.token_output ?? 0,
     $timestamp: row.timestamp ?? 0,
-    $parent_id: row.parent_id ?? null
+    $parent_id: row.parent_id ?? null,
+    $sender: row.sender ?? null
   });
 }
 function listAgentIds(db) {
@@ -635,6 +645,19 @@ function deleteSession(db, sessionKey) {
   delMsg.run(sessionKey);
   const delSess = db.prepare("DELETE FROM sessions WHERE session_key = ?");
   delSess.run(sessionKey);
+}
+function aggregateParticipants(db, sessionKey) {
+  const rows = db.prepare(
+    "SELECT DISTINCT sender FROM messages WHERE session_key = ? AND sender IS NOT NULL AND sender <> ''"
+  ).all(sessionKey);
+  if (!rows.length) return null;
+  return rows.map((r) => r.sender).join("\u3001");
+}
+function updateSessionSenderName(db, sessionKey, senderName) {
+  db.prepare("UPDATE sessions SET sender_name = $s WHERE session_key = $k").run({
+    $s: senderName,
+    $k: sessionKey
+  });
 }
 
 // sync.ts
@@ -692,6 +715,65 @@ function computeDisplayName(sessionKey, displayName, senderName) {
 }
 function isGroupSessionKey(sessionKey) {
   return sessionKey.includes(":group:");
+}
+function extractSender(content, sessionKey) {
+  if (!isGroupSessionKey(sessionKey)) return null;
+  if (!content) return null;
+  let text2 = "";
+  if (typeof content === "string") {
+    text2 = content;
+  } else if (Array.isArray(content)) {
+    text2 = content.map((b) => {
+      if (typeof b === "string") return b;
+      if (b && typeof b === "object") {
+        const bb = b;
+        if (bb.type === "text" && typeof bb.text === "string") return bb.text;
+        return JSON.stringify(bb);
+      }
+      return String(b);
+    }).join("\n");
+  } else {
+    text2 = JSON.stringify(content);
+  }
+  if (!text2) return null;
+  const lines = text2.split(/\r?\n/);
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t || t.startsWith("[")) continue;
+    const m = t.match(/^(.{1,30})[：:]\s/);
+    if (m) {
+      const name = m[1].trim();
+      if (name && !/^https?:/i.test(name)) return name;
+    }
+  }
+  return null;
+}
+function backfillSenders(db) {
+  const rows = db.prepare(
+    "SELECT id, session_key, content_json FROM messages WHERE role = 'user' AND (sender IS NULL OR sender = '')"
+  ).all();
+  const upd = db.prepare(
+    "UPDATE messages SET sender = $s WHERE id = $id AND session_key = $k"
+  );
+  for (const r of rows) {
+    let content = r.content_json;
+    if (typeof r.content_json === "string") {
+      try {
+        content = JSON.parse(r.content_json);
+      } catch {
+        content = r.content_json;
+      }
+    }
+    const sender = extractSender(content, r.session_key);
+    if (sender) {
+      upd.run({ $s: sender, $id: r.id, $k: r.session_key });
+    }
+  }
+  const groups = db.prepare("SELECT session_key FROM sessions WHERE is_group = 1").all();
+  for (const g of groups) {
+    const parts = aggregateParticipants(db, g.session_key);
+    if (parts) updateSessionSenderName(db, g.session_key, parts);
+  }
 }
 function reconcileIsGroup(sessionKey) {
   return isGroupSessionKey(sessionKey) ? 1 : 0;
@@ -792,7 +874,8 @@ async function syncSessionTranscript(db, sessionKey, sessionId, stateDir) {
         token_input: usage?.inputTokens ?? 0,
         token_output: usage?.outputTokens ?? 0,
         timestamp,
-        parent_id: msg.parentId ?? null
+        parent_id: msg.parentId ?? null,
+        sender: role === "user" ? extractSender(msg.content, sessionKey) : null
       };
       try {
         insertMessage(db, row);
@@ -820,6 +903,10 @@ async function syncSessionTranscript(db, sessionKey, sessionId, stateDir) {
       token_cache_write: tokenCacheWrite,
       message_count: currentMessageCount + newMessages
     });
+  }
+  if (newMessages > 0 || bytesRead > 0) {
+    const parts = aggregateParticipants(db, sessionKey);
+    if (parts) updateSessionSenderName(db, sessionKey, parts);
   }
   updateSyncCursor(db, sessionKey, currentOffset);
   if (newMessages > 0 || bytesRead > 0) renumberSeq(db, sessionKey);
@@ -937,7 +1024,8 @@ async function syncTrajectoryFile(db, sessionKey, sessionId, transcriptPath, sta
           token_input: 0,
           token_output: 0,
           timestamp: ts,
-          parent_id: null
+          parent_id: null,
+          sender: role === "user" ? extractSender(content, sessionKey) : null
         };
         try {
           insertMessage(db, row);
@@ -962,6 +1050,10 @@ async function syncTrajectoryFile(db, sessionKey, sessionId, transcriptPath, sta
       token_cache_write: tokenCacheWrite,
       message_count: currentCount + newMessages
     });
+  }
+  if (newMessages > 0 || bytesRead > 0) {
+    const parts = aggregateParticipants(db, sessionKey);
+    if (parts) updateSessionSenderName(db, sessionKey, parts);
   }
   updateSyncCursor(db, sessionKey, currentOffset);
   if (newMessages > 0 || bytesRead > 0) renumberSeq(db, sessionKey);
@@ -6158,7 +6250,7 @@ function buildJs() {
   js.push("  var isUser = (role === 'user'); var isTool = (role === 'toolResult' || role === 'tool');");
   js.push("  var cls = isUser ? 'bot' : 'user';");
   js.push("  var name, avatar;");
-  js.push("  if (isUser) { name = (currentSession && (currentSession.sender_name || currentSession.label)) || '\u7528\u6237'; avatar = name.slice(-1); }");
+  js.push("  if (isUser) { name = (msg.sender) || (currentSession && (currentSession.sender_name || currentSession.label)) || '\u7528\u6237'; avatar = name.slice(-1); }");
   js.push("  else if (role === 'assistant') { name = agentLabel(currentSession && currentSession.agent_id); avatar = '\u{1F99E}'; }");
   js.push("  else { name = 'toolResult'; avatar = '\u{1F527}'; }");
   js.push("  var body = renderContent(msg);");
@@ -6188,7 +6280,8 @@ function buildJs() {
   js.push("  rows.forEach(function(s){");
   js.push("    html += '<tr>';");
   js.push(`    html += '<td class="agent-cell" title="' + esc(s.agent_id || '-') + '">' + esc(s.agent_id || '-') + '</td>';`);
-  js.push(`    html += '<td class="name-cell" title="' + esc(s.sender_name || s.label || '-') + '">' + esc(s.sender_name || s.label || '-') + '</td>';`);
+  js.push("    var who = s.sender_name || s.label || '-'; var whoShort = (who && who.length > 16) ? who.slice(0, 16) + '\u2026' : who;");
+  js.push(`    html += '<td class="name-cell" title="' + esc(who) + '">' + esc(whoShort) + '</td>';`);
   js.push(`    html += '<td class="title-cell" title="' + esc(s.display_name || '-') + '">' + esc(s.display_name || '-') + '</td>';`);
   js.push(`    html += '<td class="time">' + fmt(s.updated_at).split(' ')[0] + '<small>' + fmt(s.updated_at).split(' ')[1] + '</small></td>';`);
   js.push(`    html += '<td><span class="badge ' + (catLabel(s) === '\u7FA4\u804A' ? 'group' : 'single') + '">' + catLabel(s) + '</span></td>';`);
@@ -6373,7 +6466,7 @@ function buildJs() {
   js.push("  if (!currentMessages.length) return '';");
   js.push("  var lines = [];");
   js.push("  currentMessages.forEach(function(m){");
-  js.push("    var who = m.role === 'user' ? (currentSession ? (currentSession.sender_name || currentSession.label || '\u7528\u6237') : '\u7528\u6237') : (m.role === 'assistant' ? agentLabel(currentSession && currentSession.agent_id) : (m.tool_name || '\u5DE5\u5177'));");
+  js.push("    var who = m.role === 'user' ? (m.sender || (currentSession ? (currentSession.sender_name || currentSession.label || '\u7528\u6237') : '\u7528\u6237')) : (m.role === 'assistant' ? agentLabel(currentSession && currentSession.agent_id) : (m.tool_name || '\u5DE5\u5177'));");
   js.push("    lines.push(who + ' ' + fmtTime(m.timestamp) + '\\n' + plainText(m));");
   js.push("  });");
   js.push("  return lines.join('\\n\\n');");
@@ -6700,7 +6793,7 @@ function renderMessageHtml(m) {
   const cls = isUser ? "user" : "bot";
   let name = "", avatar = "";
   if (isUser) {
-    name = m.sender_name || m.label || "\u7528\u6237";
+    name = m.sender || m.sender_name || m.label || "\u7528\u6237";
     avatar = String(name).slice(-1);
   } else if (role === "assistant") {
     name = agentLabelTs(m.agent_id);
@@ -6723,7 +6816,9 @@ function renderMessagesHtml(msgs) {
 }
 function rowHtml(s, _state) {
   const key = encodeURIComponent(s.session_key);
-  return '<tr><td class="agent-cell" title="' + escHtml(s.agent_id || "-") + '">' + escHtml(s.agent_id || "-") + '</td><td class="name-cell" title="' + escHtml(s.sender_name || s.label || "-") + '">' + escHtml(s.sender_name || s.label || "-") + '</td><td class="title-cell" title="' + escHtml(s.display_name || "-") + '">' + escHtml(s.display_name || "-") + '</td><td class="time">' + fmtTs(s.updated_at).split(" ")[0] + "<small>" + fmtTs(s.updated_at).split(" ")[1] + '</small></td><td><span class="badge ' + (catLabelTs(s) === "\u7FA4\u804A" ? "group" : "single") + '">' + catLabelTs(s) + '</span></td><td><span class="source">' + escHtml(sourceLabelTs(s.channel)) + '</span></td><td><a class="detail" href="?session=' + key + '">\u5BF9\u8BDD\u8BE6\u60C5 \u203A</a></td></tr>';
+  const who = s.sender_name || s.label || "-";
+  const whoShort = who && who.length > 16 ? who.slice(0, 16) + "\u2026" : who;
+  return '<tr><td class="agent-cell" title="' + escHtml(s.agent_id || "-") + '">' + escHtml(s.agent_id || "-") + '</td><td class="name-cell" title="' + escHtml(who) + '">' + escHtml(whoShort) + '</td><td class="title-cell" title="' + escHtml(s.display_name || "-") + '">' + escHtml(s.display_name || "-") + '</td><td class="time">' + fmtTs(s.updated_at).split(" ")[0] + "<small>" + fmtTs(s.updated_at).split(" ")[1] + '</small></td><td><span class="badge ' + (catLabelTs(s) === "\u7FA4\u804A" ? "group" : "single") + '">' + catLabelTs(s) + '</span></td><td><span class="source">' + escHtml(sourceLabelTs(s.channel)) + '</span></td><td><a class="detail" href="?session=' + key + '">\u5BF9\u8BDD\u8BE6\u60C5 \u203A</a></td></tr>';
 }
 function ssrControlsHtml(state) {
   const f = state.filters || {};
@@ -6839,7 +6934,7 @@ function buildExportText(session, messages, byteBudget) {
   lines.push("\u6765\u6E90\uFF1A" + sourceLabelTs(session.channel) + "  \u5206\u7C7B\uFF1A" + catLabelTs(session));
   lines.push("");
   messages.forEach(function(m) {
-    const who = m.role === "user" ? session.sender_name || session.label || "\u7528\u6237" : m.role === "assistant" ? session.agent_id || "Assistant" : m.tool_name || "\u5DE5\u5177";
+    const who = m.role === "user" ? m.sender || session.sender_name || session.label || "\u7528\u6237" : m.role === "assistant" ? session.agent_id || "Assistant" : m.tool_name || "\u5DE5\u5177";
     lines.push(who + " " + fmtTimeShort(m.timestamp));
     lines.push(plainTextTs(m));
     lines.push("");
@@ -6883,6 +6978,10 @@ function getDb(_stateDir) {
   if (!dbInstance) {
     const dbPath = resolveDbPath();
     dbInstance = openSessionAdminDb(dbPath);
+    try {
+      backfillSenders(dbInstance);
+    } catch {
+    }
   }
   return dbInstance;
 }
@@ -6952,7 +7051,10 @@ function syncSessionRegistry(api) {
         } else if (entry.category === "stopped") {
           status = "stopped";
         }
-        const senderName = computeSenderName(sessionKey, entry.origin?.label);
+        const isGroup = reconcileIsGroup(sessionKey);
+        const fallbackName = computeSenderName(sessionKey, entry.origin?.label);
+        const existing = getSession(db, sessionKey);
+        const senderName = isGroup ? existing?.sender_name || fallbackName : fallbackName;
         upsertSession(db, {
           session_key: sessionKey,
           session_id: entry.sessionId,
@@ -6961,7 +7063,7 @@ function syncSessionRegistry(api) {
           display_name: computeDisplayName(sessionKey, entry.displayName, senderName),
           channel: channelFromSessionKey(sessionKey),
           sender_name: senderName,
-          is_group: reconcileIsGroup(sessionKey),
+          is_group: isGroup,
           status,
           updated_at: entry.updatedAt ?? now
         });
@@ -7227,7 +7329,8 @@ function createAdminApiHandler(api) {
             token_input: m.token_input,
             token_output: m.token_output,
             timestamp: m.timestamp,
-            parent_id: m.parent_id
+            parent_id: m.parent_id,
+            sender: m.sender
           })),
           totalMessages: result.total,
           sessionKey: key

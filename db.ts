@@ -39,6 +39,7 @@ export type MessageRow = {
   token_output: number;
   timestamp: number;
   parent_id: string | null;
+  sender: string | null;
 };
 
 export function openSessionAdminDb(dbPath: string): DatabaseSync {
@@ -99,6 +100,7 @@ function initSchema(db: DatabaseSync) {
       token_output INTEGER NOT NULL DEFAULT 0,
       timestamp INTEGER NOT NULL DEFAULT 0,
       parent_id TEXT,
+      sender TEXT,
       PRIMARY KEY (session_key, id)
     );
 
@@ -131,6 +133,20 @@ function initSchema(db: DatabaseSync) {
     );
   } catch {
     // Column already exists — ignore.
+  }
+  // Migrate: messages.sender (per-message speaker).
+  try {
+    db.exec("ALTER TABLE messages ADD COLUMN sender TEXT");
+  } catch {
+    // Column already exists — ignore.
+  }
+  // Migrate: drop the legacy sessions.participants column. Speakers are now
+  // stored directly in sender_name, so the extra column is redundant.
+  // Best-effort: ignore if it doesn't exist (fresh DB) or can't be dropped.
+  try {
+    db.exec("ALTER TABLE sessions DROP COLUMN participants");
+  } catch {
+    // Column doesn't exist or drop unsupported — ignore.
   }
 }
 
@@ -455,11 +471,11 @@ export function insertMessage(
     INSERT OR IGNORE INTO messages (
       id, session_key, seq, role, type, content_json,
       model, provider, tool_name, tool_call_id, is_error,
-      token_input, token_output, timestamp, parent_id
+      token_input, token_output, timestamp, parent_id, sender
     ) VALUES (
       $id, $session_key, $seq, $role, $type, $content_json,
       $model, $provider, $tool_name, $tool_call_id, $is_error,
-      $token_input, $token_output, $timestamp, $parent_id
+      $token_input, $token_output, $timestamp, $parent_id, $sender
     )
   `);
   stmt.run({
@@ -476,9 +492,10 @@ export function insertMessage(
     $is_error: row.is_error ? 1 : 0,
     $token_input: row.token_input ?? 0,
     $token_output: row.token_output ?? 0,
-    $timestamp: row.timestamp ?? 0,
-    $parent_id: row.parent_id ?? null,
-  });
+      $timestamp: row.timestamp ?? 0,
+      $parent_id: row.parent_id ?? null,
+      $sender: row.sender ?? null,
+    });
 }
 
 // ── Agents list ────────────────────────────────────────────────────────
@@ -510,4 +527,30 @@ export function deleteSession(db: DatabaseSync, sessionKey: string): void {
   delMsg.run(sessionKey);
   const delSess = db.prepare("DELETE FROM sessions WHERE session_key = ?");
   delSess.run(sessionKey);
+}
+
+/**
+ * Aggregate the distinct human speakers of a session (group chats only) into a
+ * comma-joined string. Returns null when there are no per-message senders
+ * (e.g. direct chats, where speakers aren't parsed into `sender`).
+ */
+export function aggregateParticipants(db: DatabaseSync, sessionKey: string): string | null {
+  const rows = db
+    .prepare(
+      "SELECT DISTINCT sender FROM messages WHERE session_key = ? AND sender IS NOT NULL AND sender <> ''",
+    )
+    .all(sessionKey) as { sender: string }[];
+  if (!rows.length) return null;
+  return rows.map((r) => r.sender).join("、");
+}
+
+export function updateSessionSenderName(
+  db: DatabaseSync,
+  sessionKey: string,
+  senderName: string | null,
+): void {
+  db.prepare("UPDATE sessions SET sender_name = $s WHERE session_key = $k").run({
+    $s: senderName,
+    $k: sessionKey,
+  });
 }

@@ -3,9 +3,11 @@ import path from "node:path";
 import readline from "node:readline";
 import type { DatabaseSync } from "node:sqlite";
 import {
+  aggregateParticipants,
   getSession,
   insertMessage,
   renumberSeq,
+  updateSessionSenderName,
   updateSyncCursor,
   upsertSession,
   type MessageRow,
@@ -128,6 +130,91 @@ export function computeDisplayName(
  */
 export function isGroupSessionKey(sessionKey: string): boolean {
   return sessionKey.includes(":group:");
+}
+
+/**
+ * Extract the human speaker from a group-chat user message.
+ *
+ * OpenClaw formats IM group messages so the speaker's name prefixes the body,
+ * e.g.:
+ *   [message_id: om_xxx]
+ *   胡卫东: 在
+ *   [System: ...]
+ * We only parse group sessions (direct chats keep their counterpart id as
+ * sender_name and must not be rewritten to a single name). The prefix line is
+ * the first non-bracketed line containing a `:` / `：`.
+ */
+export function extractSender(content: unknown, sessionKey: string): string | null {
+  if (!isGroupSessionKey(sessionKey)) return null;
+  if (!content) return null;
+  let text = "";
+  if (typeof content === "string") {
+    text = content;
+  } else if (Array.isArray(content)) {
+    text = content
+      .map((b) => {
+        if (typeof b === "string") return b;
+        if (b && typeof b === "object") {
+          const bb = b as Record<string, unknown>;
+          if (bb.type === "text" && typeof bb.text === "string") return bb.text;
+          return JSON.stringify(bb);
+        }
+        return String(b);
+      })
+      .join("\n");
+  } else {
+    text = JSON.stringify(content);
+  }
+  if (!text) return null;
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t || t.startsWith("[")) continue; // skip system lines (message_id, System, …)
+    const m = t.match(/^(.{1,30})[：:]\s/);
+    if (m) {
+      const name = m[1].trim();
+      if (name && !/^https?:/i.test(name)) return name;
+    }
+  }
+  return null;
+}
+
+/**
+ * One-time backfill for messages ingested before `sender` was tracked.
+ * Reparses every group-chat user message whose sender is still null, then
+ * re-aggregates each group's participants. Idempotent — already-populated
+ * rows are skipped by the WHERE clause.
+ */
+export function backfillSenders(db: DatabaseSync): void {
+  const rows = db
+    .prepare(
+      "SELECT id, session_key, content_json FROM messages WHERE role = 'user' AND (sender IS NULL OR sender = '')",
+    )
+    .all() as { id: string; session_key: string; content_json: string | null }[];
+  const upd = db.prepare(
+    "UPDATE messages SET sender = $s WHERE id = $id AND session_key = $k",
+  );
+  for (const r of rows) {
+    let content: unknown = r.content_json;
+    if (typeof r.content_json === "string") {
+      try {
+        content = JSON.parse(r.content_json);
+      } catch {
+        content = r.content_json;
+      }
+    }
+    const sender = extractSender(content, r.session_key);
+    if (sender) {
+      upd.run({ $s: sender, $id: r.id, $k: r.session_key });
+    }
+  }
+  const groups = db
+    .prepare("SELECT session_key FROM sessions WHERE is_group = 1")
+    .all() as { session_key: string }[];
+  for (const g of groups) {
+    const parts = aggregateParticipants(db, g.session_key);
+    if (parts) updateSessionSenderName(db, g.session_key, parts);
+  }
 }
 
 
@@ -331,6 +418,7 @@ export async function syncSessionTranscript(
         token_output: usage?.outputTokens ?? 0,
         timestamp,
         parent_id: (msg.parentId as string) ?? null,
+        sender: role === "user" ? extractSender(msg.content, sessionKey) : null,
       };
 
       try {
@@ -366,6 +454,10 @@ export async function syncSessionTranscript(
     });
   }
 
+  if (newMessages > 0 || bytesRead > 0) {
+    const parts = aggregateParticipants(db, sessionKey);
+    if (parts) updateSessionSenderName(db, sessionKey, parts);
+  }
   updateSyncCursor(db, sessionKey, currentOffset);
 
   // Keep `seq` a contiguous, time-ordered index (see renumberSeq).
@@ -562,6 +654,7 @@ async function syncTrajectoryFile(
           token_output: 0,
           timestamp: ts,
           parent_id: null,
+          sender: role === "user" ? extractSender(content, sessionKey) : null,
         };
 
         try {
@@ -593,6 +686,10 @@ async function syncTrajectoryFile(
     });
   }
 
+  if (newMessages > 0 || bytesRead > 0) {
+    const parts = aggregateParticipants(db, sessionKey);
+    if (parts) updateSessionSenderName(db, sessionKey, parts);
+  }
   updateSyncCursor(db, sessionKey, currentOffset);
 
   // Keep `seq` a contiguous, time-ordered index (see renumberSeq).

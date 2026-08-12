@@ -170,7 +170,7 @@ function buildJs() {
   js.push("  var isUser = (role === 'user'); var isTool = (role === 'toolResult' || role === 'tool');");
   js.push("  var cls = isUser ? 'bot' : 'user';");
   js.push("  var name, avatar;");
-  js.push("  if (isUser) { name = (currentSession && (currentSession.sender_name || currentSession.label)) || '用户'; avatar = name.slice(-1); }");
+  js.push("  if (isUser) { name = (msg.sender) || (currentSession && (currentSession.sender_name || currentSession.label)) || '用户'; avatar = name.slice(-1); }");
   js.push("  else if (role === 'assistant') { name = agentLabel(currentSession && currentSession.agent_id); avatar = '🦞'; }");
   js.push("  else { name = 'toolResult'; avatar = '🔧'; }");
   js.push("  var body = renderContent(msg);");
@@ -200,7 +200,8 @@ function buildJs() {
   js.push("  rows.forEach(function(s){");
   js.push("    html += '<tr>';");
   js.push("    html += '<td class=\"agent-cell\" title=\"' + esc(s.agent_id || '-') + '\">' + esc(s.agent_id || '-') + '</td>';");
-  js.push("    html += '<td class=\"name-cell\" title=\"' + esc(s.sender_name || s.label || '-') + '\">' + esc(s.sender_name || s.label || '-') + '</td>';");
+  js.push("    var who = s.sender_name || s.label || '-'; var whoShort = (who && who.length > 16) ? who.slice(0, 16) + '…' : who;");
+  js.push("    html += '<td class=\"name-cell\" title=\"' + esc(who) + '\">' + esc(whoShort) + '</td>';");
   js.push("    html += '<td class=\"title-cell\" title=\"' + esc(s.display_name || '-') + '\">' + esc(s.display_name || '-') + '</td>';");
   js.push("    html += '<td class=\"time\">' + fmt(s.updated_at).split(' ')[0] + '<small>' + fmt(s.updated_at).split(' ')[1] + '</small></td>';");
   js.push("    html += '<td><span class=\"badge ' + (catLabel(s) === '群聊' ? 'group' : 'single') + '\">' + catLabel(s) + '</span></td>';");
@@ -385,7 +386,7 @@ function buildJs() {
   js.push("  if (!currentMessages.length) return '';");
   js.push("  var lines = [];");
   js.push("  currentMessages.forEach(function(m){");
-  js.push("    var who = m.role === 'user' ? (currentSession ? (currentSession.sender_name || currentSession.label || '用户') : '用户') : (m.role === 'assistant' ? agentLabel(currentSession && currentSession.agent_id) : (m.tool_name || '工具'));");
+  js.push("    var who = m.role === 'user' ? (m.sender || (currentSession ? (currentSession.sender_name || currentSession.label || '用户') : '用户')) : (m.role === 'assistant' ? agentLabel(currentSession && currentSession.agent_id) : (m.tool_name || '工具'));");
   js.push("    lines.push(who + ' ' + fmtTime(m.timestamp) + '\\n' + plainText(m));");
   js.push("  });");
   js.push("  return lines.join('\\n\\n');");
@@ -701,7 +702,7 @@ function renderMessageHtml(m) {
   const isTool = role === "tool" || role === "toolResult";
   const cls = isUser ? "user" : "bot";
   let name = "", avatar = "";
-  if (isUser) { name = m.sender_name || m.label || "用户"; avatar = String(name).slice(-1); }
+  if (isUser) { name = m.sender || m.sender_name || m.label || "用户"; avatar = String(name).slice(-1); }
   else if (role === "assistant") { name = agentLabelTs(m.agent_id); avatar = "🦞"; }
   else { name = "Tool"; avatar = "🔧"; }
   let body = renderContentHtml(m.content_json, m);
@@ -716,9 +717,11 @@ function renderMessagesHtml(msgs) {
 }
 function rowHtml(s, _state) {
   const key = encodeURIComponent(s.session_key);
+  const who = s.sender_name || s.label || "-";
+  const whoShort = (who && who.length > 16) ? who.slice(0, 16) + "…" : who;
   return "<tr>" +
     '<td class="agent-cell" title="' + escHtml(s.agent_id || "-") + '">' + escHtml(s.agent_id || "-") + "</td>" +
-    '<td class="name-cell" title="' + escHtml(s.sender_name || s.label || "-") + '">' + escHtml(s.sender_name || s.label || "-") + "</td>" +
+    '<td class="name-cell" title="' + escHtml(who) + '">' + escHtml(whoShort) + "</td>" +
     '<td class="title-cell" title="' + escHtml(s.display_name || "-") + '">' + escHtml(s.display_name || "-") + "</td>" +
     '<td class="time">' + fmtTs(s.updated_at).split(" ")[0] + "<small>" + fmtTs(s.updated_at).split(" ")[1] + "</small></td>" +
     '<td><span class="badge ' + (catLabelTs(s) === "群聊" ? "group" : "single") + '">' + catLabelTs(s) + "</span></td>" +
@@ -835,7 +838,7 @@ export function buildExportText(session, messages, byteBudget) {
   lines.push("来源：" + sourceLabelTs(session.channel) + "  分类：" + catLabelTs(session));
   lines.push("");
   messages.forEach(function (m) {
-    const who = m.role === "user" ? (session.sender_name || session.label || "用户") : (m.role === "assistant" ? (session.agent_id || "Assistant") : (m.tool_name || "工具"));
+    const who = m.role === "user" ? (m.sender || session.sender_name || session.label || "用户") : (m.role === "assistant" ? (session.agent_id || "Assistant") : (m.tool_name || "工具"));
     lines.push(who + " " + fmtTimeShort(m.timestamp));
     lines.push(plainTextTs(m));
     lines.push("");

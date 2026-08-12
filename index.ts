@@ -24,6 +24,7 @@ import {
   channelFromSessionKey,
   computeSenderName,
   computeDisplayName,
+  backfillSenders,
 } from "./sync.js";
 import { renderListPage, renderDetailPage, buildExportText } from "./ui.js";
 
@@ -53,6 +54,13 @@ function getDb(_stateDir?: string) {
   if (!dbInstance) {
     const dbPath = resolveDbPath();
     dbInstance = openSessionAdminDb(dbPath);
+    // One-time: reparse group-chat speakers for messages ingested before the
+    // `sender` column existed.
+    try {
+      backfillSenders(dbInstance);
+    } catch {
+      // backfill is best-effort
+    }
   }
   return dbInstance;
 }
@@ -172,7 +180,14 @@ function syncSessionRegistry(api: unknown) {
           status = "stopped";
         }
         // 姓名列：WebUI -> "admin"；IM 渠道有名字用名字，否则用发送人 ID
-        const senderName = computeSenderName(sessionKey, entry.origin?.label);
+        const isGroup = reconcileIsGroup(sessionKey);
+        const fallbackName = computeSenderName(sessionKey, entry.origin?.label);
+        // 群聊：仅当 sender_name 尚未被消息同步/回填解析出发言者时才用群名兜底，
+        // 避免把「胡卫东、…」覆盖回「智能体群聊」。
+        const existing = getSession(db, sessionKey);
+        const senderName = isGroup
+          ? (existing?.sender_name || fallbackName)
+          : fallbackName;
         upsertSession(db, {
           session_key: sessionKey,
           session_id: entry.sessionId,
@@ -181,7 +196,7 @@ function syncSessionRegistry(api: unknown) {
           display_name: computeDisplayName(sessionKey, entry.displayName, senderName),
           channel: channelFromSessionKey(sessionKey),
           sender_name: senderName,
-          is_group: reconcileIsGroup(sessionKey),
+          is_group: isGroup,
           status,
           updated_at: entry.updatedAt ?? now,
         });
@@ -484,6 +499,7 @@ function createAdminApiHandler(api: unknown) {
             token_output: m.token_output,
             timestamp: m.timestamp,
             parent_id: m.parent_id,
+            sender: m.sender,
           })),
           totalMessages: result.total,
           sessionKey: key,
