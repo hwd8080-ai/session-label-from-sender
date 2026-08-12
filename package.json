@@ -1,6 +1,6 @@
 {
   "name": "@hwd8080-ai/session-label-from-sender",
-  "version": "2026.8.12",
+  "version": "2026.8.13-beta.1",
   "description": "OpenClaw 会话管理插件 - 自动标注发送者、SQLite 增量同步、对话详情搜索/导出、支持标准 JSONL 和 trajectory 轨迹格式",
   "repository": {
     "type": "git",
