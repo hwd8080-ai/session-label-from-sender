@@ -6615,8 +6615,10 @@ function buildJs() {
   js.push("  if (!currentMessages.length) return '';");
   js.push("  var lines = [];");
   js.push("  currentMessages.forEach(function(m){");
+  js.push("    var body = plainText(m);");
+  js.push("    if (!body || !body.trim()) return;");
   js.push("    var who = m.role === 'user' ? (m.sender || (currentSession ? (currentSession.sender_name || currentSession.label || '\u7528\u6237') : '\u7528\u6237')) : (m.role === 'assistant' ? agentLabel(currentSession && currentSession.agent_id) : (m.tool_name || '\u5DE5\u5177'));");
-  js.push("    lines.push(who + ' ' + fmtTime(m.timestamp) + '\\n' + plainText(m));");
+  js.push("    lines.push(who + ' ' + fmtTime(m.timestamp) + '\\n' + body);");
   js.push("  });");
   js.push("  return lines.join('\\n\\n');");
   js.push("}");
@@ -7283,9 +7285,11 @@ function buildExportText(session, messages, byteBudget, opts) {
   lines.push("");
   messages.forEach(function(m) {
     if (!includeTools && (m.role === "tool" || m.role === "toolResult")) return;
+    const body = plainTextTs(m, { tools: includeTools, thinking: includeThinking });
+    if (!body || !body.trim()) return;
     const who = m.role === "user" ? m.sender || session.sender_name || session.label || "\u7528\u6237" : m.role === "assistant" ? session.agent_id || "Assistant" : m.tool_name || "\u5DE5\u5177";
     lines.push(who + " " + fmtTimeShort(m.timestamp));
-    lines.push(plainTextTs(m, { tools: includeTools, thinking: includeThinking }));
+    lines.push(body);
     lines.push("");
   });
   let text2 = lines.join("\n");
