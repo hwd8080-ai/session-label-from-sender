@@ -659,7 +659,8 @@ function buildJs() {
   js.push("    var res = await fetch(API + '/messages?' + params.toString());");
   js.push("    if (!res.ok) throw new Error('HTTP ' + res.status);");
   js.push("    var data = await res.json();");
-  js.push("    var msgsArr = data.messages || [];");
+  js.push("    var msgsArr = (data.messages || []);");
+  js.push("    msgsArr = msgsArr.filter(function(m){ var dt = msgDataType(m.role, m.content_json); if (dt === 'tool' && !showTools) return false; if (dt === 'thinking' && !showThinking) return false; return true; });");
   js.push("    box.innerHTML = '';");
   js.push("    if (msgsArr.length === 0) { box.innerHTML = '<div class=\\\"loading\\\">未找到匹配的消息</div>'; }");
   js.push("    else { box.innerHTML = renderMessages(msgsArr); highlightMatches(box, q); box.querySelectorAll('details').forEach(function(d){ d.setAttribute('open',''); }); }");
