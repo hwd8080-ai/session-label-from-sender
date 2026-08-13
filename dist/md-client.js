@@ -5288,7 +5288,7 @@
   _defineProperty(MarkdownIt, "StateInline", StateInline);
   var MarkdownItCallable = callable(MarkdownIt);
 
-  // mdClientEntry.ts
+  // ../session-label-from-sender/mdClientEntry.ts
   var md = MarkdownItCallable({
     html: false,
     // escape raw HTML in source -> safe against XSS from chat content
