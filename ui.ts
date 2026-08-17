@@ -418,7 +418,7 @@ function buildJs() {
   js.push("function buildAgentMenu(){");
   js.push("  var menu = $('agentMenu');");
   js.push("  if (!allAgents.length) { menu.innerHTML = '<label class=\"option\"><input type=\"checkbox\" value=\"main\">main</label>'; }");
-  js.push("  else { menu.innerHTML = allAgents.map(function(a){ return '<label class=\"option\"><input type=\"checkbox\" value=\"' + esc(a) + '\"' + (agentSel.indexOf(a) >= 0 ? ' checked' : '') + '><span>' + esc(agentLabel(a)) + '</span></label>'; }).join(''); }");
+  js.push("  else { menu.innerHTML = allAgents.map(function(a){ return '<label class=\"option\"><input type=\"checkbox\" value=\"' + esc(a) + '\"' + (agentSel.indexOf(a) >= 0 ? ' checked' : '') + '><span title=\"' + esc(agentLabel(a)) + '\">' + esc(agentLabel(a)) + '</span></label>'; }).join(''); }");
   js.push("  menu.onchange = function(){ agentSel = checkedValues(menu); updateAgentText(); };");
   js.push("}");
   js.push("async function loadAgents(){");
