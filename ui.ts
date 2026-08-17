@@ -719,6 +719,16 @@ function buildJs() {
   js.push("  var box = $('messages'); box.innerHTML = '';");
   js.push("  loadMoreMessages().then(function(){ box.scrollTop = box.scrollHeight - box.clientHeight; });");
   js.push("}");
+  js.push("function onDateChange(e){")
+  js.push("  var sd = $('dStart'), ed = $('dEnd');");
+  js.push("  if (!sd || !ed || !sd.value || !ed.value) { applyDateFilter(); return; }");
+  js.push("  var start = sd.value, end = ed.value;");
+  js.push("  if (start <= end) { applyDateFilter(); return; }");
+  js.push("  var t = e && e.target ? e.target.id : '';");
+  js.push("  if (t === 'dStart') { ed.value = start; }");
+  js.push("  else if (t === 'dEnd') { sd.value = end; }");
+  js.push("  applyDateFilter();");
+  js.push("}");
   js.push("document.addEventListener('DOMContentLoaded', function(){");
   js.push("  var _ssr = document.getElementById('ssrControls'); if (_ssr) _ssr.style.display = 'none';");
   js.push("  $('sourceMenu').innerHTML = '';");
@@ -745,8 +755,8 @@ function buildJs() {
   js.push("  var fabCopyFab = document.getElementById('fabCopyFab'); if (fabCopyFab) fabCopyFab.addEventListener('click', exportConv);");
   js.push("  var jt = document.getElementById('jumpTopFab'); if (jt) jt.addEventListener('click', jumpToTop);");
   js.push("  var ft = document.getElementById('fabToggle'); if (ft) ft.addEventListener('click', function(){ var g = $('fabGroup'); var open = g.classList.toggle('open'); this.setAttribute('aria-expanded', String(open)); this.setAttribute('aria-label', open ? '收起快捷操作' : '展开快捷操作'); });");
-  js.push("  var ds = document.getElementById('dStart'); if (ds) ds.addEventListener('change', applyDateFilter);");
-  js.push("  var de = document.getElementById('dEnd'); if (de) de.addEventListener('change', applyDateFilter);");
+  js.push("  var ds = document.getElementById('dStart'); if (ds) ds.addEventListener('change', onDateChange);");
+  js.push("  var de = document.getElementById('dEnd'); if (de) de.addEventListener('change', onDateChange);");
   js.push("  var dsc = document.getElementById('dStartClear'); if (dsc) dsc.addEventListener('click', function(){ var a = document.getElementById('dStart'); if (a) a.value = ''; applyDateFilter(); });");
   js.push("  var dec = document.getElementById('dEndClear'); if (dec) dec.addEventListener('click', function(){ var b = document.getElementById('dEnd'); if (b) b.value = ''; applyDateFilter(); });");
   js.push("  var sinclr = document.getElementById('searchInputClear'); if (sinclr) sinclr.addEventListener('click', function(){ $('msgSearch').value = ''; doMsgSearch(); });")
