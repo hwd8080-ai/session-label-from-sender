@@ -62,6 +62,33 @@ Building from source does not modify `~/.openclaw/openclaw.json` automatically. 
 
 Then run `openclaw daemon restart`.
 
+### Option 3: Docker deployment (build then cp into container)
+
+For OpenClaw running in Docker where the **extensions directory is not volume-mounted**. Assuming you already started a container named `openclaw` from your own OpenClaw image, just build on the host and cp the artifacts in:
+
+```bash
+# 1) Build on the host (zero dependencies, no npm install needed)
+git clone https://github.com/hwd8080-ai/session-label-from-sender.git /tmp/slf
+cd /tmp/slf
+node build.mjs
+
+# 2) cp the 4 runtime files into the running container
+#    Inside the container OpenClaw runs as root; extensions live at /root/.openclaw/extensions
+docker cp openclaw.plugin.json openclaw:/root/.openclaw/extensions/session-label-from-sender/
+docker cp index.mjs            openclaw:/root/.openclaw/extensions/session-label-from-sender/
+docker cp dist                 openclaw:/root/.openclaw/extensions/session-label-from-sender/
+
+# 3) Add the enable entry in the container's openclaw.json (once if volume-persisted), then restart
+#    Enable config: plugins.entries.session-label-from-sender = { "enabled": true }
+docker exec openclaw sh -c 'cat /root/.openclaw/openclaw.json'   # confirm the enable entry exists
+docker restart openclaw
+```
+
+Notes:
+
+- **Without a volume**, you must re-cp after every `docker rm` / rebuild. If you started the container with `-v openclaw-data:/root/.openclaw`, the plugin and config persist, so one cp is enough.
+- Only these 4 files are needed at runtime: `openclaw.plugin.json`, `index.mjs`, `dist/index.mjs`, `dist/md-client.js`; source code does not need to enter the container.
+
 After installation, you'll see the **Session Admin** tab under the "More" area of the OpenClaw control UI.
 
 ## Usage

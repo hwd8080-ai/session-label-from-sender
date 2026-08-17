@@ -62,6 +62,33 @@ openclaw daemon restart
 
 保存后执行 `openclaw daemon restart`。
 
+### 方式三：Docker 部署（编译后 cp 进容器）
+
+适用于 OpenClaw 跑在 Docker 里、且**没有把 extensions 目录挂卷**的情况。假定你已用自建 OpenClaw 镜像启动了名为 `openclaw` 的容器，下面只需在宿主机编译后把产物 cp 进去：
+
+```bash
+# 1) 宿主机编译（零依赖，不需要 npm install）
+git clone https://github.com/hwd8080-ai/session-label-from-sender.git /tmp/slf
+cd /tmp/slf
+node build.mjs
+
+# 2) 把 4 个运行时文件 cp 进运行中的容器
+#    容器内 OpenClaw 以 root 运行，扩展目录为 /root/.openclaw/extensions
+docker cp openclaw.plugin.json openclaw:/root/.openclaw/extensions/session-label-from-sender/
+docker cp index.mjs            openclaw:/root/.openclaw/extensions/session-label-from-sender/
+docker cp dist                 openclaw:/root/.openclaw/extensions/session-label-from-sender/
+
+# 3) 在容器内 openclaw.json 加入启用项（挂卷持久则只需一次），再重启
+#    启用配置：plugins.entries.session-label-from-sender = { "enabled": true }
+docker exec openclaw sh -c 'cat /root/.openclaw/openclaw.json'   # 确认含启用项
+docker restart openclaw
+```
+
+注意：
+
+- **未挂卷**时，每次 `docker rm` 重建容器都要重新 cp。若启动容器时加了 `-v openclaw-data:/root/.openclaw` 挂卷，插件与配置会持久，cp 一次即可。
+- 运行时只需 4 个文件：`openclaw.plugin.json`、`index.mjs`、`dist/index.mjs`、`dist/md-client.js`；源码无需进容器。
+
 安装后，在 OpenClaw 控制界面的「更多」区域会看到 **会话记录（Session Admin）** 标签页。
 
 ## 使用
