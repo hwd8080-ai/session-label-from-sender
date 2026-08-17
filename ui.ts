@@ -721,13 +721,30 @@ function buildJs() {
   js.push("}");
   js.push("function onDateChange(e){")
   js.push("  var sd = $('dStart'), ed = $('dEnd');");
-  js.push("  if (!sd || !ed || !sd.value || !ed.value) { applyDateFilter(); return; }");
+  js.push("  if (!sd || !ed) { applyDateFilter(); return; }");
   js.push("  var start = sd.value, end = ed.value;");
-  js.push("  if (start <= end) { applyDateFilter(); return; }");
-  js.push("  var t = e && e.target ? e.target.id : '';");
-  js.push("  if (t === 'dStart') { ed.value = start; }");
-  js.push("  else if (t === 'dEnd') { sd.value = end; }");
+  js.push("  var tid = e && e.target ? e.target.id : '';");
+  js.push("  if (start && end && start > end) {");
+  js.push("    showToast('开始日期不能晚于结束日期');");
+  js.push("    if (tid === 'dStart') { sd.value = end; start = end; }");
+  js.push("    else if (tid === 'dEnd') { ed.value = start; end = start; }");
+  js.push("  }");
+  js.push("  ed.min = start || '';");
+  js.push("  sd.max = end || '';");
   js.push("  applyDateFilter();");
+  js.push("}");
+  js.push("function onListDateChange(e){")
+  js.push("  var sd = $('startDate'), ed = $('endDate');");
+  js.push("  if (!sd || !ed) return;");
+  js.push("  var start = sd.value, end = ed.value;");
+  js.push("  var tid = e && e.target ? e.target.id : '';");
+  js.push("  if (start && end && start > end) {");
+  js.push("    showToast('开始日期不能晚于结束日期');");
+  js.push("    if (tid === 'startDate') { sd.value = end; start = end; }");
+  js.push("    else if (tid === 'endDate') { ed.value = start; end = start; }");
+  js.push("  }");
+  js.push("  ed.min = start || '';");
+  js.push("  sd.max = end || '';");
   js.push("}");
   js.push("document.addEventListener('DOMContentLoaded', function(){");
   js.push("  var _ssr = document.getElementById('ssrControls'); if (_ssr) _ssr.style.display = 'none';");
@@ -740,7 +757,7 @@ function buildJs() {
   js.push("  $('name').addEventListener('keydown', function(e){ if (e.key === 'Enter') { currentPage = 1; loadSessions(); } });");
   js.push("  $('resetBtn').addEventListener('click', function(){");
   js.push("    agentSel = []; sourceSel = [];");
-  js.push("    $('name').value = ''; $('startDate').value = ''; $('endDate').value = '';");
+  js.push("    $('name').value = ''; $('startDate').value = ''; $('endDate').value = ''; $('startDate').min = ''; $('startDate').max = ''; $('endDate').min = ''; $('endDate').max = '';");
   js.push("    Array.prototype.slice.call($('agentMenu').querySelectorAll('input')).forEach(function(x){ x.checked = false; });");
   js.push("    Array.prototype.slice.call($('sourceMenu').querySelectorAll('input')).forEach(function(x){ x.checked = false; });");
   js.push("    updateAgentText(); updateSourceText(); currentPage = 1; loadSessions();");
@@ -757,6 +774,8 @@ function buildJs() {
   js.push("  var ft = document.getElementById('fabToggle'); if (ft) ft.addEventListener('click', function(){ var g = $('fabGroup'); var open = g.classList.toggle('open'); this.setAttribute('aria-expanded', String(open)); this.setAttribute('aria-label', open ? '收起快捷操作' : '展开快捷操作'); });");
   js.push("  var ds = document.getElementById('dStart'); if (ds) ds.addEventListener('change', onDateChange);");
   js.push("  var de = document.getElementById('dEnd'); if (de) de.addEventListener('change', onDateChange);");
+  js.push("  var lsd = document.getElementById('startDate'); if (lsd) lsd.addEventListener('change', onListDateChange);");
+  js.push("  var led = document.getElementById('endDate'); if (led) led.addEventListener('change', onListDateChange);");
   js.push("  var dsc = document.getElementById('dStartClear'); if (dsc) dsc.addEventListener('click', function(){ var a = document.getElementById('dStart'); if (a) a.value = ''; applyDateFilter(); });");
   js.push("  var dec = document.getElementById('dEndClear'); if (dec) dec.addEventListener('click', function(){ var b = document.getElementById('dEnd'); if (b) b.value = ''; applyDateFilter(); });");
   js.push("  var sinclr = document.getElementById('searchInputClear'); if (sinclr) sinclr.addEventListener('click', function(){ $('msgSearch').value = ''; doMsgSearch(); });")
