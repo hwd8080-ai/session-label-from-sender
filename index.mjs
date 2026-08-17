@@ -534,7 +534,7 @@ function updateSyncCursor(db, sessionKey, cursor) {
     `UPDATE sessions SET sync_cursor = ${cursor}, synced_at = ${Date.now()} WHERE session_key = '${sessionKey}'`
   );
 }
-function getMessages(db, sessionKey, limit = 200, beforeSeq, search, afterSeq, startTs, endTs) {
+function getMessages(db, sessionKey, limit = 200, beforeSeq, search, afterSeq, startTs, endTs, includeTools = false) {
   const whereParts = ["session_key = ?"];
   const params = [sessionKey];
   if (beforeSeq !== void 0) {
@@ -548,6 +548,9 @@ function getMessages(db, sessionKey, limit = 200, beforeSeq, search, afterSeq, s
   if (search) {
     whereParts.push("content_json LIKE ?");
     params.push(`%${search}%`);
+    if (!includeTools) {
+      whereParts.push("role NOT IN ('tool', 'toolResult')");
+    }
   }
   if (startTs !== void 0) {
     whereParts.push("timestamp >= ?");
@@ -6321,6 +6324,7 @@ function buildJs() {
   js.push("  var btf = $('btnThinkingFab'); if (btf) { btf.classList.toggle('active', showThinking); btf.setAttribute('aria-pressed', String(showThinking)); }");
   js.push("  var bf = $('btnTools'); if (bf) { bf.classList.toggle('active', showTools); bf.setAttribute('aria-pressed', String(showTools)); }");
   js.push("  var bff = $('btnToolsFab'); if (bff) { bff.classList.toggle('active', showTools); bff.setAttribute('aria-pressed', String(showTools)); }");
+  js.push("  var mt = $('msearchTools'); if (mt) mt.value = showTools ? '1' : '0';");
   js.push("  hideEmptyMessages();");
   js.push("}");
   js.push("function isActivityMsg(m){");
@@ -6726,6 +6730,7 @@ function buildJs() {
   js.push("    var params = new URLSearchParams();");
   js.push("    params.set('key', selectedKey);");
   js.push("    params.set('search', q);");
+  js.push("    params.set('tools', showTools ? '1' : '0');");
   js.push("    var sd = $('dStart').value, ed = $('dEnd').value;");
   js.push("    if (sd) params.set('dateFrom', sd);");
   js.push("    if (ed) params.set('dateTo', ed);");
@@ -7265,6 +7270,7 @@ function buildDetailHtml(state) {
   L.push("  </div></section>");
   L.push('  <form class="card" style="display:flex;gap:10px;align-items:center;padding:12px 16px;margin-bottom:16px" method="get" action="">');
   L.push('    <input type="hidden" name="session" value="' + key + '">');
+  L.push('    <input type="hidden" name="tools" id="msearchTools" value="0">');
   L.push('    <input type="search" name="msearch" placeholder="\u641C\u7D22\u6D88\u606F\u5173\u952E\u5B57\u2026" value="' + escHtml(msearch || "") + '" style="flex:1;height:38px;border:1px solid var(--field-border);border-radius:9px;padding:0 12px">');
   L.push('    <button class="btn primary" type="submit">\u641C\u7D22</button>');
   L.push('    <a class="btn secondary" href="?session=' + key + '">\u6E05\u9664</a>');
@@ -7498,7 +7504,9 @@ function createAdminPageHandler(api) {
         return true;
       }
       const msearch = params.get("msearch")?.trim() || void 0;
-      const result = getMessages(db, sessionKey, 300, void 0, msearch);
+      const mtools = params.get("tools");
+      const mIncludeTools = mtools === "1";
+      const result = getMessages(db, sessionKey, 300, void 0, msearch, void 0, void 0, void 0, mIncludeTools);
       if (params.get("dl") === "1") {
         const text2 = buildExportText(detail, result.messages).text;
         res.statusCode = 200;
@@ -7705,11 +7713,13 @@ function createAdminApiHandler(api) {
         const afterSeq = url.searchParams.get("afterSeq")?.trim();
         const after = afterSeq ? parseInt(afterSeq, 10) : void 0;
         const search = url.searchParams.get("search")?.trim() || void 0;
+        const toolsParam = url.searchParams.get("tools");
+        const includeTools = toolsParam === "1";
         const dateFrom = url.searchParams.get("dateFrom")?.trim();
         const dateTo = url.searchParams.get("dateTo")?.trim();
         const startTs = dateFrom ? new Date(dateFrom).getTime() : void 0;
         const endTs = dateTo ? new Date(dateTo).getTime() + 864e5 : void 0;
-        const result = getMessages(db, key, limit, before, search, after, startTs, endTs);
+        const result = getMessages(db, key, limit, before, search, after, startTs, endTs, includeTools);
         res.statusCode = 200;
         res.setHeader("content-type", "application/json; charset=utf-8");
         res.end(JSON.stringify({

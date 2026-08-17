@@ -380,6 +380,7 @@ export function getMessages(
   afterSeq?: number,
   startTs?: number,
   endTs?: number,
+  includeTools: boolean = false,
 ): { messages: MessageRow[]; total: number } {
   const whereParts: string[] = ["session_key = ?"];
   const params: (string | number)[] = [sessionKey];
@@ -395,6 +396,10 @@ export function getMessages(
   if (search) {
     whereParts.push("content_json LIKE ?");
     params.push(`%${search}%`);
+    // 搜索默认排除工具 / 工具结果噪声；仅当用户在界面勾选「显示工具」时（includeTools）才纳入。
+    if (!includeTools) {
+      whereParts.push("role NOT IN ('tool', 'toolResult')");
+    }
   }
   if (startTs !== undefined) {
     whereParts.push("timestamp >= ?");

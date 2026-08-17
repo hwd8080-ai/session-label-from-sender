@@ -245,7 +245,9 @@ function createAdminPageHandler(api: unknown) {
         return true;
       }
       const msearch = params.get("msearch")?.trim() || undefined;
-      const result = getMessages(db, sessionKey, 300, undefined, msearch);
+      const mtools = params.get("tools");
+      const mIncludeTools = mtools === "1";
+      const result = getMessages(db, sessionKey, 300, undefined, msearch, undefined, undefined, undefined, mIncludeTools);
       if (params.get("dl") === "1") {
         const text = buildExportText(detail, result.messages).text;
         res.statusCode = 200;
@@ -476,11 +478,13 @@ function createAdminApiHandler(api: unknown) {
         const afterSeq = url.searchParams.get("afterSeq")?.trim();
         const after = afterSeq ? parseInt(afterSeq, 10) : undefined;
         const search = url.searchParams.get("search")?.trim() || undefined;
+        const toolsParam = url.searchParams.get("tools");
+        const includeTools = toolsParam === "1";
         const dateFrom = url.searchParams.get("dateFrom")?.trim();
         const dateTo = url.searchParams.get("dateTo")?.trim();
         const startTs = dateFrom ? new Date(dateFrom).getTime() : undefined;
         const endTs = dateTo ? new Date(dateTo).getTime() + 86400000 : undefined;
-        const result = getMessages(db, key, limit, before, search, after, startTs, endTs);
+        const result = getMessages(db, key, limit, before, search, after, startTs, endTs, includeTools);
         res.statusCode = 200;
         res.setHeader("content-type", "application/json; charset=utf-8");
         res.end(JSON.stringify({

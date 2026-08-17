@@ -250,6 +250,7 @@ function buildJs() {
   js.push("  var btf = $('btnThinkingFab'); if (btf) { btf.classList.toggle('active', showThinking); btf.setAttribute('aria-pressed', String(showThinking)); }");
   js.push("  var bf = $('btnTools'); if (bf) { bf.classList.toggle('active', showTools); bf.setAttribute('aria-pressed', String(showTools)); }");
   js.push("  var bff = $('btnToolsFab'); if (bff) { bff.classList.toggle('active', showTools); bff.setAttribute('aria-pressed', String(showTools)); }");
+  js.push("  var mt = $('msearchTools'); if (mt) mt.value = showTools ? '1' : '0';");
   js.push("  hideEmptyMessages();");
   js.push("}");
   js.push("function isActivityMsg(m){");
@@ -657,6 +658,7 @@ function buildJs() {
   js.push("    var params = new URLSearchParams();");
   js.push("    params.set('key', selectedKey);");
   js.push("    params.set('search', q);");
+  js.push("    params.set('tools', showTools ? '1' : '0');");
   js.push("    var sd = $('dStart').value, ed = $('dEnd').value;");
   js.push("    if (sd) params.set('dateFrom', sd);");
   js.push("    if (ed) params.set('dateTo', ed);");
@@ -1128,6 +1130,7 @@ function buildDetailHtml(state) {
   L.push("  </div></section>");
   L.push("  <form class=\"card\" style=\"display:flex;gap:10px;align-items:center;padding:12px 16px;margin-bottom:16px\" method=\"get\" action=\"\">");
   L.push("    <input type=\"hidden\" name=\"session\" value=\"" + key + "\">");
+  L.push("    <input type=\"hidden\" name=\"tools\" id=\"msearchTools\" value=\"0\">");
   L.push("    <input type=\"search\" name=\"msearch\" placeholder=\"搜索消息关键字…\" value=\"" + escHtml(msearch || "") + "\" style=\"flex:1;height:38px;border:1px solid var(--field-border);border-radius:9px;padding:0 12px\">");
   L.push("    <button class=\"btn primary\" type=\"submit\">搜索</button>");
   L.push("    <a class=\"btn secondary\" href=\"?session=" + key + "\">清除</a>");
