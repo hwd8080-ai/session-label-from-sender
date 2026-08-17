@@ -6783,6 +6783,8 @@ function buildJs() {
   js.push("  var sd = $('dStart').value, ed = $('dEnd').value;");
   js.push("  if (sd && ed && sd > ed) { showToast('\u5F00\u59CB\u65E5\u671F\u4E0D\u80FD\u665A\u4E8E\u7ED3\u675F\u65E5\u671F'); return; }");
   js.push("  updateDateClearButtons();");
+  js.push("  var q = $('msgSearch').value.trim();");
+  js.push("  if (q) { doMsgSearch(); return; }");
   js.push("  msgMode = 'desc'; msgAllLoaded = false; oldestSeq = null; newestSeq = null; msgOffset = 0; currentMessages = []; topDate = null; bottomDate = null;");
   js.push("  var box = $('messages'); box.innerHTML = '';");
   js.push("  loadMoreMessages().then(function(){ box.scrollTop = box.scrollHeight - box.clientHeight; });");
@@ -6826,7 +6828,7 @@ function buildJs() {
   js.push("  loadAgents();");
   js.push("  loadSources();");
   js.push("  loadSessions();");
-  js.push("  $('msgSearch').addEventListener('input', function(){ clearTimeout(this._timer); this._timer = setTimeout(doMsgSearch, 300); updateSearchClearButton(); });");
+  js.push("  $('msgSearch').addEventListener('input', function(){ updateSearchClearButton(); });");
   js.push("  $('msgSearch').addEventListener('keydown', function(e){");
   js.push("    if (e.key === 'Enter') { clearTimeout(this._timer); if (isSearchActive && currentMatchMsgs && currentMatchMsgs.length) { e.preventDefault(); gotoMatch(currentMatchIdx + 1); } else { doMsgSearch(); } }");
   js.push("    else if (e.key === 'ArrowDown') { if (isSearchActive && currentMatchMsgs && currentMatchMsgs.length) { e.preventDefault(); gotoMatch(currentMatchIdx + 1); } }");
