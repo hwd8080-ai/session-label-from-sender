@@ -487,7 +487,6 @@ function buildJs() {
   js.push("  var ds = $('dStart'), de = $('dEnd'); if (ds) ds.value = ''; if (de) de.value = '';");
   js.push("  var ms = $('msgSearch'); if (ms) ms.value = '';");
   js.push("  isSearchActive = false; msgHighlight = null; currentMatchIdx = -1; currentMatchMsgs = [];");
-  js.push("  var sc = $('searchCount'); if (sc) sc.textContent = '';");
   js.push("  var sn = $('searchNav'); if (sn) sn.style.display = 'none';");
   js.push("  updateDateClearButtons(); updateSearchClearButton();");
   js.push("  $('messages').innerHTML = '';");
@@ -555,7 +554,6 @@ function buildJs() {
   js.push("function closeDrawer(){");
   js.push("  var msgSearch = $('msgSearch'); if (msgSearch) msgSearch.value = '';");
   js.push("  var sd = $('dStart'), ed = $('dEnd'); if (sd) sd.value = ''; if (ed) ed.value = '';");
-  js.push("  var sc = $('searchCount'); if (sc) sc.textContent = '';");
   js.push("  isSearchActive = false; msgHighlight = null; currentMatchIdx = -1; currentMatchMsgs = [];");
   js.push("  var sn = $('searchNav'); if (sn) sn.style.display = 'none';");
   js.push("  // Defensive: also reset message fetch state so reopening another session");
@@ -655,31 +653,27 @@ function buildJs() {
   js.push("  var len = currentMatchMsgs.length;");
   js.push("  if (idx < 0) idx = len - 1;");
   js.push("  if (idx >= len) idx = 0;");
-  js.push("  if (currentMatchIdx >= 0 && currentMatchMsgs[currentMatchIdx]) {");
-  js.push("    currentMatchMsgs[currentMatchIdx].querySelectorAll('mark').forEach(function(mk){ mk.classList.remove('active'); });");
-  js.push("  }");
+  js.push("  if (currentMatchIdx >= 0 && currentMatchMsgs[currentMatchIdx]) currentMatchMsgs[currentMatchIdx].classList.remove('active');");
   js.push("  currentMatchIdx = idx;");
-  js.push("  var el = currentMatchMsgs[currentMatchIdx];");
-  js.push("  el.querySelectorAll('mark').forEach(function(mk){ mk.classList.add('active'); });");
-  js.push("  var firstMark = el.querySelector('mark');");
-  js.push("  if (firstMark) firstMark.scrollIntoView({block:'center', behavior:'smooth'});");
+  js.push("  var m = currentMatchMsgs[currentMatchIdx];");
+  js.push("  m.classList.add('active');");
+  js.push("  m.scrollIntoView({block:'center', behavior:'smooth'});");
   js.push("  updateMatchNav();");
   js.push("}");
 
   js.push("async function doMsgSearch(){");
   js.push("  var q = $('msgSearch').value.trim().toLowerCase();");
   js.push("  msgMode = 'desc'; msgAllLoaded = false; oldestSeq = null; newestSeq = null; msgOffset = 0; currentMessages = []; topDate = null; bottomDate = null;");
-  js.push("  var count = $('searchCount');");
   js.push("  var box = $('messages');");
+
   js.push("  if (!q) {");
-  js.push("    isSearchActive = false; msgHighlight = null; count.textContent = ''; currentMatchIdx = -1; currentMatchMsgs = [];");
+  js.push("    isSearchActive = false; msgHighlight = null; currentMatchIdx = -1; currentMatchMsgs = [];");
   js.push("    msgOffset = 0; msgAllLoaded = false; oldestSeq = null;");
   js.push("    updateSearchClearButton(); updateMatchNav();");
   js.push("    loadMoreMessages().then(function(){ box.scrollTop = box.scrollHeight - box.clientHeight; updateVisibility(); });");
   js.push("    return;");
   js.push("  }");
   js.push("  msgHighlight = q; msgAllLoaded = true; isSearchActive = true;");
-  js.push("  count.textContent = '搜索中…';");
   js.push("  try {");
   js.push("    var params = new URLSearchParams();");
   js.push("    params.set('key', selectedKey);");
@@ -698,11 +692,10 @@ function buildJs() {
   js.push("    if (msgsArr.length === 0) { box.innerHTML = '<div class=\\\"loading\\\">未找到匹配的消息</div>'; currentMatchMsgs = []; currentMatchIdx = -1; }");
   js.push("    else { box.innerHTML = renderMessages(msgsArr); highlightMatches(box, q); box.querySelectorAll('details').forEach(function(d){ d.setAttribute('open',''); }); }");
   js.push("    box.scrollTop = 0;");
-  js.push("    count.textContent = msgsArr.length + ' 条匹配';");
-  js.push("    currentMatchMsgs = Array.prototype.slice.call(box.querySelectorAll('article.message')).filter(function(el){ return !!el.querySelector('mark'); });");
+  js.push("    currentMatchMsgs = Array.prototype.slice.call(box.querySelectorAll('mark'));");
   js.push("    if (currentMatchMsgs.length) { currentMatchIdx = -1; gotoMatch(0); } else { currentMatchIdx = -1; updateMatchNav(); }");
   js.push("    updateSearchClearButton();");
-  js.push("  } catch (e) { box.innerHTML = '<div class=\\\"loading\\\">搜索失败：' + esc(e.message) + '</div>'; count.textContent = ''; currentMatchMsgs = []; currentMatchIdx = -1; updateMatchNav(); }");
+  js.push("  } catch (e) { box.innerHTML = '<div class=\\\"loading\\\">搜索失败：' + esc(e.message) + '</div>'; currentMatchMsgs = []; currentMatchIdx = -1; updateMatchNav(); }");
   js.push("  updateVisibility();");
   js.push("}");
   js.push("function updateDateClearButtons(){");
@@ -860,7 +853,7 @@ function buildListHtml(state) {
   lines.push("    <div class=\"meta\" id=\"meta\"></div>");
   lines.push("    <div class=\"drawer-controls\">");
   lines.push("      <div class=\"drawer-dates\"><div class=\"range\"><div class=\"date-wrap\"><input id=\"dStart\" class=\"control\" type=\"date\" aria-label=\"开始日期\"><button type=\"button\" class=\"date-inside-clear\" id=\"dStartClear\" aria-label=\"清除开始日期\" style=\"display:none\">×</button></div><span>至</span><div class=\"date-wrap\"><input id=\"dEnd\" class=\"control\" type=\"date\" aria-label=\"结束日期\"><button type=\"button\" class=\"date-inside-clear\" id=\"dEndClear\" aria-label=\"清除结束日期\" style=\"display:none\">×</button></div></div></div>");
-  lines.push("      <div class=\"msg-search\"><div class=\"search-wrap\"><input type=\"search\" id=\"msgSearch\" placeholder=\"搜索消息关键字…\"><button type=\"button\" class=\"search-inside-clear\" id=\"searchInputClear\" aria-label=\"清除搜索\" style=\"display:none\">×</button></div><span class=\"search-count\" id=\"searchCount\"></span><span class=\"search-nav\" id=\"searchNav\" style=\"display:none\"><button type=\"button\" class=\"nav-btn\" id=\"searchPrev\" aria-label=\"上一个匹配\" title=\"上一个匹配\">▲</button><span class=\"nav-count\" id=\"searchNavCount\">0/0</span><button type=\"button\" class=\"nav-btn\" id=\"searchNext\" aria-label=\"下一个匹配\" title=\"下一个匹配\">▼</button></span></div>");
+  lines.push("      <div class=\"msg-search\"><div class=\"search-wrap\"><input type=\"search\" id=\"msgSearch\" placeholder=\"搜索消息关键字…\"><button type=\"button\" class=\"search-inside-clear\" id=\"searchInputClear\" aria-label=\"清除搜索\" style=\"display:none\">×</button></div><span class=\"search-nav\" id=\"searchNav\" style=\"display:none\"><button type=\"button\" class=\"nav-btn\" id=\"searchPrev\" aria-label=\"上一个匹配\" title=\"上一个匹配\">▲</button><span class=\"nav-count\" id=\"searchNavCount\">0/0</span><button type=\"button\" class=\"nav-btn\" id=\"searchNext\" aria-label=\"下一个匹配\" title=\"下一个匹配\">▼</button></span></div>");
   lines.push("    </div>");
   lines.push("    <div class=\"fab-group\" id=\"fabGroup\" aria-label=\"快捷操作\">");
   lines.push("      <button type=\"button\" class=\"fab-item fab-tool above\" id=\"btnThinkingFab\" aria-pressed=\"false\" data-tip=\"思考\" style=\"order:2\">🧠</button>");
