@@ -581,6 +581,11 @@ function buildJs() {
   js.push("  try { document.execCommand('copy'); } catch (e) {}");
   js.push("  ta.remove();");
   js.push("}");
+  js.push("function copyLink(url){");
+  js.push("  var done = function(){ showToast('链接已复制，请在外部浏览器打开', 2400); };");
+  js.push("  try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(done, function(){ fallbackCopy(url); done(); }); return; } } catch (_) {}");
+  js.push("  fallbackCopy(url); done();");
+  js.push("}");
 
   js.push("async function exportConv(){");
   js.push("  if (!selectedKey) return;");
@@ -695,6 +700,7 @@ function buildJs() {
   js.push("  $('agentSelect').addEventListener('click', function(e){ e.stopPropagation(); toggleMenu('agentMenu'); });");
   js.push("  $('sourceSelect').addEventListener('click', function(e){ e.stopPropagation(); toggleMenu('sourceMenu'); });");
   js.push("  document.addEventListener('click', function(e){ if (!e.target.closest('.field')) closeMenus(); });");
+  js.push("  document.addEventListener('click', function(e){ var a = e.target.closest('a'); if (!a) return; var href = a.getAttribute('href') || ''; if (/^https?:\\/\\//i.test(href)) { e.preventDefault(); copyLink(href); } });");
   js.push("  $('searchBtn').addEventListener('click', function(e){ currentPage = 1; loadSessions(); });");
   js.push("  $('name').addEventListener('keydown', function(e){ if (e.key === 'Enter') { currentPage = 1; loadSessions(); } });");
   js.push("  $('resetBtn').addEventListener('click', function(){");
