@@ -6760,7 +6760,11 @@ function buildJs() {
   js.push("    msgsArr = msgsArr.filter(function(m){ var dt = msgDataType(m.role, m.content_json); if ((dt === 'tool' || isActivityMsg(m)) && !showTools) return false; if (dt === 'thinking' && !showThinking) return false; return true; });");
   js.push("    box.innerHTML = '';");
   js.push(`    if (msgsArr.length === 0) { box.innerHTML = '<div class=\\"loading\\">\u672A\u627E\u5230\u5339\u914D\u7684\u6D88\u606F</div>'; currentMatchMsgs = []; currentMatchIdx = -1; }`);
-  js.push("    else { box.innerHTML = renderMessages(msgsArr); highlightMatches(box, q); box.querySelectorAll('details').forEach(function(d){ d.setAttribute('open',''); }); }");
+  js.push("    else { box.innerHTML = renderMessages(msgsArr);");
+  js.push(`      if (!showThinking) { box.querySelectorAll('[data-type=\\"thinking\\"]').forEach(function(el){ if (el.parentNode) el.parentNode.removeChild(el); }); }`);
+  js.push(`      if (!showTools) { box.querySelectorAll('[data-type=\\"tool\\"]').forEach(function(el){ if (el.parentNode) el.parentNode.removeChild(el); }); }`);
+  js.push("      hideEmptyMessages();");
+  js.push("      highlightMatches(box, q); box.querySelectorAll('details').forEach(function(d){ d.setAttribute('open',''); }); }");
   js.push("    box.scrollTop = 0;");
   js.push("    currentMatchMsgs = Array.prototype.slice.call(box.querySelectorAll('mark'));");
   js.push("    if (currentMatchMsgs.length) { currentMatchIdx = -1; gotoMatch(0); } else { currentMatchIdx = -1; updateMatchNav(); }");
